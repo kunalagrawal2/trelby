@@ -22,8 +22,8 @@ class AIService:
         self.client = anthropic.Anthropic(api_key=api_key)
         print("Debug: Claude client initialized successfully")
     
-    def get_response(self, user_message, context=""):
-        """Get a response from Claude with optional document context"""
+    def get_response(self, user_message, context="", conversation_history=None):
+        """Get a response from Claude with optional document context and conversation history"""
         try:
             print(f"Debug: Attempting API call with model: claude-3-5-sonnet-20241022")
             
@@ -63,22 +63,41 @@ DOCUMENT CONTEXT:
 - Reference specific characters, scenes, or elements from the script when appropriate
 - Provide context-aware suggestions that build on what's already written
 - If the context shows a complete script, offer comprehensive analysis and suggestions
-- If the context shows a partial script, focus on development and expansion ideas"""
+- If the context shows a partial script, focus on development and expansion ideas
+
+CONVERSATION CONTEXT:
+- Remember previous messages in the conversation to provide continuity
+- Build on previous advice and suggestions
+- Reference earlier parts of the conversation when relevant
+- Maintain context about what the writer is working on and their goals"""
 
             # Add document context if provided
             if context and context.strip():
                 system_prompt += f"\n\nCURRENT SCREENPLAY CONTEXT:\n{context}"
             
+            # Build messages array with conversation history
+            messages = []
+            
+            # Add conversation history if provided
+            if conversation_history:
+                for msg in conversation_history:
+                    role = "user" if msg['is_user'] else "assistant"
+                    messages.append({
+                        "role": role,
+                        "content": msg['message']
+                    })
+            
+            # Add current user message
+            messages.append({
+                "role": "user",
+                "content": user_message
+            })
+            
             response = self.client.messages.create(
                 model="claude-3-5-sonnet-20241022",
                 max_tokens=500,  # Reduced from 1000 for faster responses
                 system=system_prompt,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": user_message
-                    }
-                ]
+                messages=messages
             )
             print("Debug: API call successful")
             return response.content[0].text

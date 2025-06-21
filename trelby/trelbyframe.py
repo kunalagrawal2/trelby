@@ -129,6 +129,7 @@ class MyFrame(wx.Frame):
         viewMenu.AppendCheckItem(ID_VIEW_SHOW_FORMATTING, "&Show formatting")
         viewMenu.AppendCheckItem(ID_VIEW_AI_ASSISTANT, "&AI Assistant")
         viewMenu.Append(ID_VIEW_FULL_SCREEN, "&Fullscreen\tF11")
+        viewMenu.Append(ID_VIEW_CLEAR_AI_CONVERSATION, "Clear AI &Conversation")
         
         # Set AI Assistant to be visible by default
         viewMenu.Check(ID_VIEW_AI_ASSISTANT, True)
@@ -337,6 +338,7 @@ class MyFrame(wx.Frame):
             self.Bind(wx.EVT_MENU, self.OnShowFormatting, id=ID_VIEW_SHOW_FORMATTING)
             self.Bind(wx.EVT_MENU, self.ToggleAIAssistant, id=ID_VIEW_AI_ASSISTANT)
             self.Bind(wx.EVT_MENU, self.ToggleFullscreen, id=ID_VIEW_FULL_SCREEN)
+            self.Bind(wx.EVT_MENU, self.OnClearAIConversation, id=ID_VIEW_CLEAR_AI_CONVERSATION)
             self.Bind(wx.EVT_MENU, self.OnFindNextError, id=ID_SCRIPT_FIND_ERROR)
             self.Bind(wx.EVT_MENU, self.OnPaginate, id=ID_SCRIPT_PAGINATE)
             self.Bind(
@@ -973,3 +975,8 @@ class MyFrame(wx.Frame):
         if hasattr(self, 'aiAssistantPanel') and self.aiAssistantPanel:
             self.aiAssistantPanel.refresh_appearance()
         event.Skip()
+
+    def OnClearAIConversation(self, event=None):
+        """Clear the AI assistant conversation history"""
+        if hasattr(self, 'aiAssistantPanel') and self.aiAssistantPanel:
+            self.aiAssistantPanel.clear_conversation_history()
