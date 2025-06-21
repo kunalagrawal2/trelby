@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import base64
 import anthropic
 from dotenv import load_dotenv
 from .base import AIService
@@ -21,8 +22,8 @@ class AnthropicService(AIService):
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model = model
 
-    def get_response(self, user_message, context="", conversation_history=None):
-        """Get a response from Claude with optional document context and conversation history"""
+    def get_response(self, user_message, context="", conversation_history=None, image=None):
+        """Get a response from Claude with optional document context, conversation history, and image"""
         try:
             # Build system prompt with context
             system_prompt = """You are an expert AI assistant specializing in screenwriting and creative storytelling. Your role is to help writers develop compelling narratives, characters, and dialogue.
@@ -66,7 +67,13 @@ CONVERSATION MEMORY:
 - Remember previous messages in the conversation and build upon them
 - Reference earlier points made by the user or yourself when relevant
 - Maintain continuity in your advice and suggestions
-- Don't repeat information already discussed unless specifically asked"""
+- Don't repeat information already discussed unless specifically asked
+
+IMAGE ANALYSIS:
+- When provided with images, analyze them for visual storytelling elements
+- Help writers understand how visual elements can enhance their narrative
+- Suggest ways to incorporate visual details into screenplay descriptions
+- Provide feedback on character appearance, setting details, and visual mood"""
 
             # Add document context if provided
             if context and context.strip():
@@ -85,11 +92,48 @@ CONVERSATION MEMORY:
                             "content": msg['message']
                         })
             
-            # Add current user message
-            messages.append({
-                "role": "user",
-                "content": user_message
-            })
+            # Add current user message with optional image
+            if image and image.get('data'):
+                # Encode image as base64
+                image_base64 = base64.b64encode(image['data']).decode('utf-8')
+                
+                # Determine image type from filename
+                filename = image.get('filename', '').lower()
+                if filename.endswith('.png'):
+                    media_type = "image/png"
+                elif filename.endswith(('.jpg', '.jpeg')):
+                    media_type = "image/jpeg"
+                elif filename.endswith('.gif'):
+                    media_type = "image/gif"
+                elif filename.endswith('.webp'):
+                    media_type = "image/webp"
+                else:
+                    media_type = "image/jpeg"  # Default
+                
+                # Create message with image
+                messages.append({
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": user_message
+                        },
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": image_base64
+                            }
+                        }
+                    ]
+                })
+            else:
+                # Add current user message without image
+                messages.append({
+                    "role": "user",
+                    "content": user_message
+                })
             
             response = self.client.messages.create(
                 model=self.model,

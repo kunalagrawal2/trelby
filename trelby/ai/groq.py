@@ -21,7 +21,7 @@ class GroqService(AIService):
         self.client = groq.Groq(api_key=api_key)
         self.model = model
 
-    def get_response(self, user_message, context="", conversation_history=None):
+    def get_response(self, user_message, context="", conversation_history=None, image=None):
         """Get a response from Groq with optional document context and conversation history"""
         try:
             # Build system prompt with context
@@ -71,6 +71,10 @@ CONVERSATION MEMORY:
             # Add document context if provided
             if context and context.strip():
                 system_prompt += f"\n\nCURRENT SCREENPLAY CONTEXT:\n{context}"
+            
+            # Note: Groq doesn't support images, so we ignore the image parameter
+            if image:
+                user_message += "\n\n[Note: An image was provided but this model doesn't support image analysis. Please describe the image in your message if you need help with it.]"
             
             # Build messages array with conversation history
             messages = []

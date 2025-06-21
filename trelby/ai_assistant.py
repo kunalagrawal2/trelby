@@ -3,7 +3,10 @@
 import wx
 import time
 import threading
+import base64
+import os
 from trelby.appearance_utils import get_ai_pane_colors
+import trelby.screenplay as screenplay
 
 class AIAssistantPanel(wx.Panel):
     """Basic AI Assistant Panel similar to Cursor's chat interface"""
@@ -13,11 +16,12 @@ class AIAssistantPanel(wx.Panel):
         
         self.gd = gd
         self.chat_history = []
+        self.current_image = None
         
         # Get appearance-aware colors
         self.colors = get_ai_pane_colors()
         
-        # Available services and models
+        # Available services and models with image support info
         self.available_services = {
             "anthropic": [
                 "claude-3-5-sonnet-20241022",
@@ -33,6 +37,18 @@ class AIAssistantPanel(wx.Panel):
                 "gemma2-9b-it",
                 "llama2-70b-4096"
             ]
+        }
+        
+        # Models that support image input
+        self.image_support = {
+            "anthropic": [
+                "claude-3-5-sonnet-20241022",
+                "claude-3-5-haiku-20241022",
+                "claude-3-opus-20240229",
+                "claude-3-sonnet-20240229",
+                "claude-3-haiku-20240307"
+            ],
+            "groq": []  # Groq models don't support images yet
         }
         
         # Initialize AI service
@@ -73,6 +89,30 @@ class AIAssistantPanel(wx.Panel):
         selection_sizer.Add(model_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
         selection_sizer.Add(self.model_choice, 1, wx.EXPAND)
         
+        # Create image input area
+        image_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        
+        self.image_button = wx.Button(self, -1, "📷 Add Image")
+        self.image_button.SetBackgroundColour(self.colors['button_background'])
+        self.image_button.SetForegroundColour(self.colors['button_text'])
+        
+        self.image_label = wx.StaticText(self, -1, "No image selected")
+        self.image_label.SetForegroundColour(self.colors['text'])
+        
+        self.clear_image_button = wx.Button(self, -1, "❌ Clear")
+        self.clear_image_button.SetBackgroundColour(self.colors['button_background'])
+        self.clear_image_button.SetForegroundColour(self.colors['button_text'])
+        self.clear_image_button.Disable()
+        
+        image_sizer.Add(self.image_button, 0, wx.RIGHT, 5)
+        image_sizer.Add(self.image_label, 1, wx.EXPAND)
+        image_sizer.Add(self.clear_image_button, 0)
+        
+        # Create image preview area
+        self.image_preview = wx.StaticBitmap(self, -1, wx.NullBitmap, size=(200, 150))
+        self.image_preview.SetBackgroundColour(self.colors['background'])
+        self.image_preview.Hide()  # Initially hidden
+        
         # Create chat display area
         self.chat_display = wx.TextCtrl(
             self, -1, 
@@ -103,6 +143,8 @@ class AIAssistantPanel(wx.Panel):
         
         # Add to main sizer
         main_sizer.Add(selection_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        main_sizer.Add(image_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        main_sizer.Add(self.image_preview, 0, wx.ALIGN_CENTER | wx.ALL, 5)
         main_sizer.Add(self.chat_display, 1, wx.EXPAND | wx.ALL, 5)
         main_sizer.Add(input_sizer, 0, wx.EXPAND | wx.ALL, 5)
         
@@ -113,6 +155,11 @@ class AIAssistantPanel(wx.Panel):
         self.input_text.Bind(wx.EVT_TEXT_ENTER, self.OnSend)
         self.service_choice.Bind(wx.EVT_CHOICE, self.OnServiceChange)
         self.model_choice.Bind(wx.EVT_CHOICE, self.OnModelChange)
+        self.image_button.Bind(wx.EVT_BUTTON, self.OnAddImage)
+        self.clear_image_button.Bind(wx.EVT_BUTTON, self.OnClearImage)
+        
+        # Update image button state
+        self.update_image_button_state()
         
         # Add welcome message
         if self.ai_available:
@@ -121,6 +168,98 @@ class AIAssistantPanel(wx.Panel):
             welcome_msg = "AI Assistant is not available. Please check your API key configuration in the .env file."
         
         self.add_message("AI Assistant", welcome_msg, is_user=False)
+    
+    def update_image_button_state(self):
+        """Update image button state based on current model support"""
+        selected_service = self.service_choice.GetString(self.service_choice.GetSelection())
+        selected_model = self.model_choice.GetString(self.model_choice.GetSelection())
+        
+        supports_images = selected_model in self.image_support.get(selected_service, [])
+        
+        if supports_images:
+            self.image_button.Enable()
+            self.image_button.SetLabel("📷 Add Image")
+        else:
+            self.image_button.Disable()
+            self.image_button.SetLabel("📷 Add Image (Not Supported)")
+    
+    def OnAddImage(self, event):
+        """Handle image selection"""
+        with wx.FileDialog(self, "Select an image", wildcard="Image files (*.png;*.jpg;*.jpeg;*.gif;*.bmp)|*.png;*.jpg;*.jpeg;*.gif;*.bmp",
+                          style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as fileDialog:
+            
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return
+            
+            # Get the selected file path
+            pathname = fileDialog.GetPath()
+            
+            try:
+                # Read and encode the image
+                with open(pathname, "rb") as image_file:
+                    image_data = image_file.read()
+                    self.current_image = {
+                        'data': image_data,
+                        'filename': os.path.basename(pathname),
+                        'path': pathname
+                    }
+                
+                # Load and display the image preview
+                self.load_image_preview(pathname)
+                
+                # Update UI
+                self.image_label.SetLabel(f"📷 {os.path.basename(pathname)}")
+                self.clear_image_button.Enable()
+                
+                # Add system message about image
+                self.add_message("AI Assistant", f"Image '{os.path.basename(pathname)}' loaded. You can now ask questions about it!", is_user=False)
+                
+            except Exception as e:
+                wx.MessageBox(f"Error loading image: {str(e)}", "Error", wx.OK | wx.ICON_ERROR)
+    
+    def load_image_preview(self, image_path):
+        """Load and display image preview"""
+        try:
+            # Load the image
+            image = wx.Image(image_path)
+            
+            # Resize image to fit preview area (max 200x150)
+            max_width = 200
+            max_height = 150
+            
+            img_width, img_height = image.GetSize()
+            
+            # Calculate scaling factor
+            scale_x = max_width / img_width
+            scale_y = max_height / img_height
+            scale = min(scale_x, scale_y)
+            
+            # Resize image
+            new_width = int(img_width * scale)
+            new_height = int(img_height * scale)
+            
+            image = image.Scale(new_width, new_height, wx.IMAGE_QUALITY_HIGH)
+            
+            # Convert to bitmap and display
+            bitmap = wx.Bitmap(image)
+            self.image_preview.SetBitmap(bitmap)
+            self.image_preview.Show()
+            
+            # Refresh layout
+            self.Layout()
+            
+        except Exception as e:
+            print(f"Error loading image preview: {e}")
+            self.image_preview.Hide()
+    
+    def OnClearImage(self, event):
+        """Handle image clearing"""
+        self.current_image = None
+        self.image_label.SetLabel("No image selected")
+        self.clear_image_button.Disable()
+        self.image_preview.Hide()
+        self.Layout()
+        self.add_message("AI Assistant", "Image cleared.", is_user=False)
     
     def OnServiceChange(self, event):
         """Handle service selection change"""
@@ -139,6 +278,9 @@ class AIAssistantPanel(wx.Panel):
         # Update current service
         self.current_service = selected_service
         
+        # Update image button state
+        self.update_image_button_state()
+        
         # Try to create new service with first model
         try:
             from trelby.ai_service import AIService
@@ -154,6 +296,9 @@ class AIAssistantPanel(wx.Panel):
             
         selected_service = self.service_choice.GetString(self.service_choice.GetSelection())
         selected_model = self.model_choice.GetString(self.model_choice.GetSelection())
+        
+        # Update image button state
+        self.update_image_button_state()
         
         try:
             # Create new AI service with selected model
@@ -191,6 +336,15 @@ class AIAssistantPanel(wx.Panel):
         self.model_choice.SetForegroundColour(self.colors['input_text'])
         self.model_choice.Refresh()
         
+        # Update image button colors
+        self.image_button.SetBackgroundColour(self.colors['button_background'])
+        self.image_button.SetForegroundColour(self.colors['button_text'])
+        self.image_button.Refresh()
+        
+        self.clear_image_button.SetBackgroundColour(self.colors['button_background'])
+        self.clear_image_button.SetForegroundColour(self.colors['button_text'])
+        self.clear_image_button.Refresh()
+        
         # Refresh the panel itself
         self.Refresh()
     
@@ -216,6 +370,171 @@ class AIAssistantPanel(wx.Panel):
             'is_user': is_user,
             'timestamp': time.time()
         })
+        
+        # If it's an AI message and contains actionable content, show "Add to Script" button
+        if not is_user and self.is_actionable_content(message):
+            self.show_add_to_script_button(message)
+    
+    def is_actionable_content(self, message):
+        """Check if the AI response contains content that could be added to the script"""
+        actionable_keywords = [
+            'scene', 'character', 'dialogue', 'action', 'description', 'setting',
+            'location', 'interior', 'exterior', 'day', 'night', 'morning', 'evening',
+            'close up', 'wide shot', 'medium shot', 'fade', 'cut to', 'dissolve'
+        ]
+        
+        message_lower = message.lower()
+        return any(keyword in message_lower for keyword in actionable_keywords)
+    
+    def show_add_to_script_button(self, content):
+        """Show a button to add AI content to the script"""
+        # Create a dialog with the content and options
+        dialog = wx.Dialog(self, -1, "Add to Script", size=(500, 400))
+        
+        # Create sizer
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # Add label
+        label = wx.StaticText(dialog, -1, "AI Generated Content:")
+        sizer.Add(label, 0, wx.ALL, 5)
+        
+        # Add content text area
+        content_text = wx.TextCtrl(dialog, -1, content, 
+                                  style=wx.TE_MULTILINE | wx.TE_READONLY,
+                                  size=(-1, 200))
+        sizer.Add(content_text, 1, wx.EXPAND | wx.ALL, 5)
+        
+        # Add insertion options
+        options_label = wx.StaticText(dialog, -1, "Insert as:")
+        sizer.Add(options_label, 0, wx.ALL, 5)
+        
+        # Radio buttons for insertion type
+        self.insert_type = wx.RadioBox(dialog, -1, "", 
+                                      choices=["Action Line", "Scene Heading", "Character Name", "Dialogue", "Parenthetical"],
+                                      majorDimension=1, style=wx.RA_SPECIFY_COLS)
+        sizer.Add(self.insert_type, 0, wx.EXPAND | wx.ALL, 5)
+        
+        # Buttons
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        add_button = wx.Button(dialog, wx.ID_OK, "Add to Script")
+        cancel_button = wx.Button(dialog, wx.ID_CANCEL, "Cancel")
+        
+        button_sizer.Add(add_button, 0, wx.RIGHT, 5)
+        button_sizer.Add(cancel_button, 0)
+        
+        sizer.Add(button_sizer, 0, wx.ALIGN_RIGHT | wx.ALL, 5)
+        
+        dialog.SetSizer(sizer)
+        
+        # Show dialog
+        if dialog.ShowModal() == wx.ID_OK:
+            self.insert_content_to_script(content, self.insert_type.GetSelection())
+        
+        dialog.Destroy()
+    
+    def insert_content_to_script(self, content, insert_type):
+        """Insert AI-generated content into the screenplay"""
+        sp = self.get_current_screenplay()
+        if not sp:
+            wx.MessageBox("No screenplay loaded. Please open a screenplay first.", "Error", wx.OK | wx.ICON_ERROR)
+            return
+        
+        try:
+            # Get current cursor position
+            current_line = sp.line
+            
+            # Determine the line type based on selection
+            line_types = {
+                0: screenplay.ACTION,      # Action Line
+                1: screenplay.SCENE,       # Scene Heading
+                2: screenplay.CHARACTER,   # Character Name
+                3: screenplay.DIALOGUE,    # Dialogue
+                4: screenplay.PAREN        # Parenthetical
+            }
+            
+            target_type = line_types.get(insert_type, screenplay.ACTION)
+            
+            # Clean up the content for insertion
+            cleaned_content = self.clean_content_for_insertion(content, target_type)
+            
+            # Create a new Line object
+            from trelby.line import Line
+            new_line = Line(screenplay.LB_LAST, target_type, cleaned_content)
+            
+            # Insert the new line at the current position + 1
+            sp.lines.insert(current_line + 1, new_line)
+            
+            # Move cursor to the new line
+            sp.line = current_line + 1
+            sp.column = 0
+            
+            # Mark the screenplay as changed
+            sp.markChanged()
+            
+            # Refresh the main editor
+            if hasattr(self.gd, 'mainFrame') and self.gd.mainFrame:
+                if hasattr(self.gd.mainFrame, 'panel') and self.gd.mainFrame.panel:
+                    if hasattr(self.gd.mainFrame.panel, 'ctrl') and self.gd.mainFrame.panel.ctrl:
+                        self.gd.mainFrame.panel.ctrl.Refresh()
+            
+            wx.MessageBox(f"Content added to script as {['Action Line', 'Scene Heading', 'Character Name', 'Dialogue', 'Parenthetical'][insert_type]}", 
+                         "Success", wx.OK | wx.ICON_INFORMATION)
+            
+        except Exception as e:
+            wx.MessageBox(f"Error inserting content: {str(e)}", "Error", wx.OK | wx.ICON_ERROR)
+    
+    def clean_content_for_insertion(self, content, line_type):
+        """Clean and format content for insertion into the screenplay"""
+        # Remove common AI prefixes and formatting
+        content = content.strip()
+        
+        # Remove quotes if present
+        if content.startswith('"') and content.endswith('"'):
+            content = content[1:-1]
+        
+        # Remove AI assistant prefixes
+        prefixes_to_remove = [
+            "AI Assistant: ",
+            "Here's a ",
+            "Here is a ",
+            "I suggest ",
+            "You could write ",
+            "Consider adding ",
+            "Try this: ",
+            "Here's an example: ",
+            "Example: ",
+            "Suggestion: "
+        ]
+        
+        for prefix in prefixes_to_remove:
+            if content.startswith(prefix):
+                content = content[len(prefix):].strip()
+        
+        # Format based on line type
+        if line_type == screenplay.SCENE:
+            # Ensure scene headings are in proper format
+            if not content.upper() == content:
+                content = content.upper()
+            if not content.startswith(('INT.', 'EXT.', 'INT/EXT.')):
+                # Try to detect if it should be INT or EXT
+                if any(word in content.lower() for word in ['inside', 'interior', 'room', 'house', 'building', 'office']):
+                    content = f"INT. {content}"
+                elif any(word in content.lower() for word in ['outside', 'exterior', 'street', 'park', 'forest', 'beach']):
+                    content = f"EXT. {content}"
+                else:
+                    content = f"INT. {content}"  # Default to INT
+        
+        elif line_type == screenplay.CHARACTER:
+            # Ensure character names are in proper format
+            if not content.upper() == content:
+                content = content.upper()
+        
+        elif line_type == screenplay.PAREN:
+            # Ensure parentheticals are properly formatted
+            if not content.startswith('(') and not content.endswith(')'):
+                content = f"({content})"
+        
+        return content
     
     def OnSend(self, event):
         """Handle send button click or Enter key"""
@@ -254,8 +573,13 @@ class AIAssistantPanel(wx.Panel):
             # Note: The current user message hasn't been added to chat_history yet
             conversation_history = self.chat_history.copy()
             
-            # Get AI response with context and conversation history
-            response = self.ai_service.get_response(user_message, context, conversation_history)
+            # Get AI response with context, conversation history, and image if available
+            response = self.ai_service.get_response(
+                user_message, 
+                context, 
+                conversation_history,
+                self.current_image
+            )
             
             # Update UI in main thread
             wx.CallAfter(self.handle_ai_response, response)
@@ -310,7 +634,7 @@ class AIAssistantPanel(wx.Panel):
             current_scene_text = ""
             for i in range(current_scene_start, min(current_scene_end + 1, len(sp.lines))):
                 line = sp.lines[i]
-                if line.lt == sp.SCENE and line.lb == sp.LB_LAST:
+                if line.lt == screenplay.SCENE and line.lb == screenplay.LB_LAST:
                     current_scene_text = line.text
                     break
             
@@ -356,9 +680,9 @@ class AIAssistantPanel(wx.Panel):
             element_type = line.lt
             element_counts[element_type] = element_counts.get(element_type, 0) + 1
         
-        analysis += f"• Action lines: {element_counts.get(sp.ACTION, 0)}\n"
-        analysis += f"• Dialogue lines: {element_counts.get(sp.DIALOGUE, 0)}\n"
-        analysis += f"• Scene headings: {element_counts.get(sp.SCENE, 0)}\n"
+        analysis += f"• Action lines: {element_counts.get(screenplay.ACTION, 0)}\n"
+        analysis += f"• Dialogue lines: {element_counts.get(screenplay.DIALOGUE, 0)}\n"
+        analysis += f"• Scene headings: {element_counts.get(screenplay.SCENE, 0)}\n"
         
         # Suggestions
         analysis += "\nSUGGESTIONS:\n"
@@ -366,7 +690,7 @@ class AIAssistantPanel(wx.Panel):
             analysis += "• Consider adding more characters for richer interactions\n"
         if len(scenes) < 5:
             analysis += "• You might want to develop more scenes for a complete story\n"
-        if element_counts.get(sp.ACTION, 0) < element_counts.get(sp.DIALOGUE, 0):
+        if element_counts.get(screenplay.ACTION, 0) < element_counts.get(screenplay.DIALOGUE, 0):
             analysis += "• Good balance between action and dialogue\n"
         else:
             analysis += "• Consider adding more dialogue to balance the action-heavy content\n"
