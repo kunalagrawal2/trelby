@@ -3,6 +3,7 @@
 import wx
 import time
 import threading
+from trelby.appearance_utils import get_ai_pane_colors
 
 class AIAssistantPanel(wx.Panel):
     """Basic AI Assistant Panel similar to Cursor's chat interface"""
@@ -12,6 +13,9 @@ class AIAssistantPanel(wx.Panel):
         
         self.gd = gd
         self.chat_history = []
+        
+        # Get appearance-aware colors
+        self.colors = get_ai_pane_colors()
         
         # Initialize AI service
         try:
@@ -31,7 +35,8 @@ class AIAssistantPanel(wx.Panel):
             self, -1, 
             style=wx.TE_MULTILINE | wx.TE_READONLY | wx.VSCROLL | wx.HSCROLL | wx.BORDER_SUNKEN
         )
-        self.chat_display.SetBackgroundColour(wx.Colour(248, 248, 248))
+        self.chat_display.SetBackgroundColour(self.colors['background'])
+        self.chat_display.SetForegroundColour(self.colors['text'])
         
         # Create input area
         input_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -42,9 +47,13 @@ class AIAssistantPanel(wx.Panel):
             size=(-1, 60)
         )
         self.input_text.SetHint("Ask me anything about your screenplay...")
+        self.input_text.SetBackgroundColour(self.colors['input_background'])
+        self.input_text.SetForegroundColour(self.colors['input_text'])
         
         self.send_button = wx.Button(self, -1, "Send")
         self.send_button.SetDefault()
+        self.send_button.SetBackgroundColour(self.colors['button_background'])
+        self.send_button.SetForegroundColour(self.colors['button_text'])
         
         input_sizer.Add(self.input_text, 1, wx.EXPAND | wx.RIGHT, 5)
         input_sizer.Add(self.send_button, 0, wx.EXPAND)
@@ -66,6 +75,26 @@ class AIAssistantPanel(wx.Panel):
             welcome_msg = "AI Assistant is not available. Please check your API key configuration in the .env file."
         
         self.add_message("AI Assistant", welcome_msg, is_user=False)
+    
+    def refresh_appearance(self):
+        """Refresh colors when system appearance changes"""
+        self.colors = get_ai_pane_colors()
+        
+        # Update all UI elements with new colors
+        self.chat_display.SetBackgroundColour(self.colors['background'])
+        self.chat_display.SetForegroundColour(self.colors['text'])
+        self.chat_display.Refresh()
+        
+        self.input_text.SetBackgroundColour(self.colors['input_background'])
+        self.input_text.SetForegroundColour(self.colors['input_text'])
+        self.input_text.Refresh()
+        
+        self.send_button.SetBackgroundColour(self.colors['button_background'])
+        self.send_button.SetForegroundColour(self.colors['button_text'])
+        self.send_button.Refresh()
+        
+        # Refresh the panel itself
+        self.Refresh()
     
     def add_message(self, sender, message, is_user=True):
         """Add a message to the chat display"""

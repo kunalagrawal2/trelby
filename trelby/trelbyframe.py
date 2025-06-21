@@ -265,6 +265,9 @@ class MyFrame(wx.Frame):
         gd.mru.useMenu(fileMenu, 14)
 
         self.Bind(wx.EVT_MENU_HIGHLIGHT_ALL, self.OnMenuHighlight)
+        
+        # Bind system appearance change event
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSystemAppearanceChanged)
 
         self.tabCtrl.setPageChangedFunc(self.OnPageChange)
 
@@ -962,4 +965,11 @@ class MyFrame(wx.Frame):
 
     def OnSize(self, event):
         self.gd.width, self.gd.height = self.GetSize()
+        event.Skip()
+
+    def OnSystemAppearanceChanged(self, event):
+        """Handle system appearance changes (dark/light mode)"""
+        # Refresh the AI assistant panel colors
+        if hasattr(self, 'aiAssistantPanel') and self.aiAssistantPanel:
+            self.aiAssistantPanel.refresh_appearance()
         event.Skip()
