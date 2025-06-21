@@ -3,3 +3,5 @@ wxPython
 lxml
 reportlab
 pytest>=7.0
+anthropic
+python-dotenv

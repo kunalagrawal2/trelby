@@ -2,6 +2,7 @@
 
 import wx
 import time
+import threading
 
 class AIAssistantPanel(wx.Panel):
     """Basic AI Assistant Panel similar to Cursor's chat interface"""
@@ -11,6 +12,16 @@ class AIAssistantPanel(wx.Panel):
         
         self.gd = gd
         self.chat_history = []
+        
+        # Initialize AI service
+        try:
+            from trelby.ai_service import AIService
+            self.ai_service = AIService()
+            self.ai_available = True
+        except Exception as e:
+            self.ai_service = None
+            self.ai_available = False
+            print(f"AI Service not available: {e}")
         
         # Create the main sizer
         main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -49,7 +60,12 @@ class AIAssistantPanel(wx.Panel):
         self.input_text.Bind(wx.EVT_TEXT_ENTER, self.OnSend)
         
         # Add welcome message
-        self.add_message("AI Assistant", "Hello! I'm your AI writing assistant. I can help you with:\n\n• Character development\n• Plot suggestions\n• Dialogue improvements\n• Scene structure\n• Genre-specific advice\n\nWhat would you like to work on today?", is_user=False)
+        if self.ai_available:
+            welcome_msg = "Hello! I'm your AI writing assistant powered by Claude. I can help you with:\n\n• Character development\n• Plot suggestions\n• Dialogue improvements\n• Scene structure\n• Genre-specific advice\n\nWhat would you like to work on today?"
+        else:
+            welcome_msg = "AI Assistant is not available. Please check your API key configuration in the .env file."
+        
+        self.add_message("AI Assistant", welcome_msg, is_user=False)
     
     def add_message(self, sender, message, is_user=True):
         """Add a message to the chat display"""
@@ -86,28 +102,36 @@ class AIAssistantPanel(wx.Panel):
         # Clear input
         self.input_text.SetValue("")
         
-        # Simulate AI response (in a real implementation, this would call an AI service)
-        self.simulate_ai_response(message)
-    
-    def simulate_ai_response(self, user_message):
-        """Simulate AI response for demo purposes"""
-        # This is a simple demo response system
-        # In a real implementation, this would call an actual AI service
+        # Disable send button while processing
+        self.send_button.Disable()
+        self.send_button.SetLabel("Thinking...")
         
-        response = "I understand you're asking about: " + user_message + "\n\n"
-        response += "This is a demo response. In a real implementation, I would:\n"
-        response += "• Analyze your screenplay context\n"
-        response += "• Provide specific writing suggestions\n"
-        response += "• Help with character development\n"
-        response += "• Suggest plot improvements\n\n"
-        response += "Would you like me to analyze your current screenplay?"
-        
-        # Simulate typing delay
-        wx.CallAfter(self.delayed_response, response)
+        # Get AI response
+        if self.ai_available:
+            # Run AI call in background thread
+            thread = threading.Thread(target=self.get_ai_response, args=(message,))
+            thread.daemon = True
+            thread.start()
+        else:
+            self.add_message("AI Assistant", "AI service is not available. Please check your configuration.", is_user=False)
+            self.send_button.Enable()
+            self.send_button.SetLabel("Send")
     
-    def delayed_response(self, response):
-        """Add response after a short delay to simulate AI processing"""
+    def get_ai_response(self, user_message):
+        """Get response from Claude in background thread"""
+        try:
+            response = self.ai_service.get_response(user_message)
+            # Update UI in main thread
+            wx.CallAfter(self.handle_ai_response, response)
+        except Exception as e:
+            error_msg = f"Error getting AI response: {str(e)}"
+            wx.CallAfter(self.handle_ai_response, error_msg)
+    
+    def handle_ai_response(self, response):
+        """Handle AI response in main thread"""
         self.add_message("AI Assistant", response, is_user=False)
+        self.send_button.Enable()
+        self.send_button.SetLabel("Send")
     
     def get_screenplay_context(self):
         """Get context from the current screenplay"""
