@@ -12,7 +12,7 @@ class AIAssistantPanel(wx.Panel):
         wx.Panel.__init__(self, parent, -1)
         
         self.gd = gd
-        self.chat_history = []  # Fresh conversation history on each app start
+        self.chat_history = []
         
         # Get appearance-aware colors
         self.colors = get_ai_pane_colors()
@@ -33,7 +33,7 @@ class AIAssistantPanel(wx.Panel):
         # Create chat display area
         self.chat_display = wx.TextCtrl(
             self, -1, 
-            style=wx.TE_MULTILINE | wx.TE_READONLY | wx.VSCROLL | wx.HSCROLL | wx.BORDER_SUNKEN
+            style=wx.TE_MULTILINE | wx.TE_READONLY | wx.VSCROLL | wx.BORDER_SUNKEN
         )
         self.chat_display.SetBackgroundColour(self.colors['background'])
         self.chat_display.SetForegroundColour(self.colors['text'])
@@ -152,8 +152,19 @@ class AIAssistantPanel(wx.Panel):
             # Get document context
             context = self.get_screenplay_context(user_message)
             
-            # Get conversation history (excluding the current message which was just added)
-            conversation_history = self.chat_history[:-1]  # Exclude the current user message
+            # Get conversation history (all previous messages)
+            # Note: The current user message hasn't been added to chat_history yet
+            conversation_history = self.chat_history.copy()
+            
+            # Debug logging
+            print(f"Debug: Sending conversation with {len(conversation_history)} previous messages")
+            if conversation_history:
+                recent_messages = conversation_history[-6:]  # Last 6 messages
+                print(f"Debug: Recent conversation:")
+                for msg in recent_messages:
+                    sender = "User" if msg['is_user'] else "AI"
+                    preview = msg['message'][:50] + "..." if len(msg['message']) > 50 else msg['message']
+                    print(f"  {sender}: {preview}")
             
             # Get AI response with context and conversation history
             response = self.ai_service.get_response(user_message, context, conversation_history)
@@ -273,17 +284,4 @@ class AIAssistantPanel(wx.Panel):
         else:
             analysis += "• Consider adding more dialogue to balance the action-heavy content\n"
         
-        return analysis
-    
-    def clear_conversation_history(self):
-        """Clear the conversation history and display"""
-        self.chat_history = []
-        self.chat_display.SetValue("")
-        
-        # Add welcome message back
-        if self.ai_available:
-            welcome_msg = "Hello! I'm your AI writing assistant powered by Claude. I can help you with:\n\n• Character development\n• Plot suggestions\n• Dialogue improvements\n• Scene structure\n• Genre-specific advice\n\nI have access to your current screenplay and can provide context-aware feedback. What would you like to work on today?"
-        else:
-            welcome_msg = "AI Assistant is not available. Please check your API key configuration in the .env file."
-        
-        self.add_message("AI Assistant", welcome_msg, is_user=False) 
+        return analysis 

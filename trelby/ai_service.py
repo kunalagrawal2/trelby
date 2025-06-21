@@ -65,11 +65,11 @@ DOCUMENT CONTEXT:
 - If the context shows a complete script, offer comprehensive analysis and suggestions
 - If the context shows a partial script, focus on development and expansion ideas
 
-CONVERSATION CONTEXT:
-- Remember previous messages in the conversation to provide continuity
-- Build on previous advice and suggestions
-- Reference earlier parts of the conversation when relevant
-- Maintain context about what the writer is working on and their goals"""
+CONVERSATION MEMORY:
+- Remember previous messages in the conversation and build upon them
+- Reference earlier points made by the user or yourself when relevant
+- Maintain continuity in your advice and suggestions
+- Don't repeat information already discussed unless specifically asked"""
 
             # Add document context if provided
             if context and context.strip():
@@ -80,12 +80,14 @@ CONVERSATION CONTEXT:
             
             # Add conversation history if provided
             if conversation_history:
+                print(f"Debug: Including {len(conversation_history)} previous messages in conversation")
                 for msg in conversation_history:
-                    role = "user" if msg['is_user'] else "assistant"
-                    messages.append({
-                        "role": role,
-                        "content": msg['message']
-                    })
+                    if msg['message'].strip():  # Only add non-empty messages
+                        role = "user" if msg['is_user'] else "assistant"
+                        messages.append({
+                            "role": role,
+                            "content": msg['message']
+                        })
             
             # Add current user message
             messages.append({
