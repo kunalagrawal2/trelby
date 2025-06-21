@@ -181,6 +181,29 @@ class AIAssistantPanel(wx.Panel):
         self.send_button.Enable()
         self.send_button.SetLabel("Send")
     
+    def add_selected_text_to_chat(self):
+        """Add selected text to the chat input field"""
+        selected_text = self.get_selected_text()
+        if selected_text:
+            # Truncate for display if too long
+            preview = selected_text[:100] + "..." if len(selected_text) > 100 else selected_text
+            current_input = self.input_text.GetValue()
+            
+            if current_input:
+                # If there's already text, add a separator
+                new_input = current_input + "\n\nSelected text:\n" + preview
+            else:
+                new_input = "Selected text:\n" + preview
+            
+            self.input_text.SetValue(new_input)
+            self.input_text.SetFocus()
+            
+            # Show a brief message in chat
+            self.add_message("System", f"Added selected text to input ({len(selected_text)} characters)", is_user=False)
+        else:
+            # Show error message
+            self.add_message("System", "No text selected. Please select some text first.", is_user=False)
+    
     def get_current_screenplay(self):
         """Get the current screenplay object"""
         try:
@@ -200,6 +223,38 @@ class AIAssistantPanel(wx.Panel):
         if not sp:
             return "No screenplay loaded."
         
+        # Check if user message contains selected text (added via menu)
+        if "Selected text:" in user_message:
+            # Extract the selected text from the message
+            lines = user_message.split('\n')
+            selected_text = ""
+            in_selected_section = False
+            
+            for line in lines:
+                if line.strip() == "Selected text:":
+                    in_selected_section = True
+                    continue
+                elif in_selected_section and line.strip() == "":
+                    break
+                elif in_selected_section:
+                    selected_text += line + "\n"
+            
+            if selected_text.strip():
+                context_parts = []
+                context_parts.append("SELECTED TEXT:")
+                context_parts.append(selected_text.strip())
+                context_parts.append("\n" + "="*50 + "\n")
+                
+                # Add basic script info for context
+                context_parts.append("SCRIPT INFO:")
+                context_parts.append(f"- Total lines: {len(sp.lines)}")
+                context_parts.append(f"- Characters: {len(sp.getCharacterNames())}")
+                context_parts.append(f"- Scenes: {len(sp.getSceneLocations())}")
+                context_parts.append(f"- Current page: {sp.line2page(sp.line) if sp.line < len(sp.lines) else 'N/A'}")
+                
+                return "\n".join(context_parts)
+        
+        # Fall back to original method if no selection
         context_parts = []
         
         # Basic script info
@@ -245,6 +300,31 @@ class AIAssistantPanel(wx.Panel):
                 context_parts.append(f"\n[Error getting full script: {e}]")
         
         return "\n".join(context_parts)
+    
+    def get_selected_text(self):
+        """Get the currently selected text from the screenplay"""
+        sp = self.get_current_screenplay()
+        if not sp:
+            return None
+        
+        # Get selected text as ClipData
+        cd = sp.getSelectedAsCD(False)
+        if not cd or not cd.lines:
+            return None
+        
+        # Convert ClipData lines to text
+        selected_lines = []
+        for line in cd.lines:
+            selected_lines.append(line.text)
+        
+        # Join lines with appropriate line breaks
+        selected_text = "\n".join(selected_lines)
+        
+        # Only return if there's actually some text selected
+        if selected_text.strip():
+            return selected_text
+        
+        return None
     
     def analyze_screenplay(self):
         """Analyze the current screenplay and provide insights"""

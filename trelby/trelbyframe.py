@@ -297,6 +297,8 @@ class MyFrame(wx.Frame):
                 m.Append(ID_EDIT_COPY, "Copy")
 
             m.Append(ID_EDIT_PASTE, "Paste")
+            m.AppendSeparator()
+            m.Append(ID_AI_ADD_TO_CHAT, "Add to AI Chat")
 
             self.Bind(wx.EVT_MENU, self.OnNewScript, id=ID_FILE_NEW)
             self.Bind(wx.EVT_MENU, self.OnOpen, id=ID_FILE_OPEN)
@@ -339,6 +341,7 @@ class MyFrame(wx.Frame):
             self.Bind(wx.EVT_MENU, self.ToggleAIAssistant, id=ID_VIEW_AI_ASSISTANT)
             self.Bind(wx.EVT_MENU, self.ToggleFullscreen, id=ID_VIEW_FULL_SCREEN)
             self.Bind(wx.EVT_MENU, self.OnClearAIConversation, id=ID_VIEW_CLEAR_AI_CONVERSATION)
+            self.Bind(wx.EVT_MENU, self.OnAddToAIChat, id=ID_AI_ADD_TO_CHAT)
             self.Bind(wx.EVT_MENU, self.OnFindNextError, id=ID_SCRIPT_FIND_ERROR)
             self.Bind(wx.EVT_MENU, self.OnPaginate, id=ID_SCRIPT_PAGINATE)
             self.Bind(
@@ -980,3 +983,15 @@ class MyFrame(wx.Frame):
         """Clear the AI assistant conversation history"""
         if hasattr(self, 'aiAssistantPanel') and self.aiAssistantPanel:
             self.aiAssistantPanel.clear_conversation_history()
+
+    def OnAddToAIChat(self, event=None):
+        """Handle the 'Add to AI Chat' menu action"""
+        if hasattr(self, 'aiAssistantPanel') and self.aiAssistantPanel:
+            self.aiAssistantPanel.add_selected_text_to_chat()
+        else:
+            wx.MessageBox(
+                "AI Assistant is not available. Please enable it from View > AI Assistant.",
+                "AI Assistant Not Available",
+                wx.OK | wx.ICON_INFORMATION,
+                self
+            )
