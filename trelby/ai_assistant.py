@@ -61,7 +61,7 @@ class AIAssistantPanel(wx.Panel):
         
         # Add welcome message
         if self.ai_available:
-            welcome_msg = "Hello! I'm your AI writing assistant powered by Claude. I can help you with:\n\n• Character development\n• Plot suggestions\n• Dialogue improvements\n• Scene structure\n• Genre-specific advice\n\nWhat would you like to work on today?"
+            welcome_msg = "Hello! I'm your AI writing assistant powered by Claude. I can help you with:\n\n• Character development\n• Plot suggestions\n• Dialogue improvements\n• Scene structure\n• Genre-specific advice\n\nI have access to your current screenplay and can provide context-aware feedback. What would you like to work on today?"
         else:
             welcome_msg = "AI Assistant is not available. Please check your API key configuration in the .env file."
         
@@ -120,7 +120,12 @@ class AIAssistantPanel(wx.Panel):
     def get_ai_response(self, user_message):
         """Get response from Claude in background thread"""
         try:
-            response = self.ai_service.get_response(user_message)
+            # Get document context
+            context = self.get_screenplay_context(user_message)
+            
+            # Get AI response with context
+            response = self.ai_service.get_response(user_message, context)
+            
             # Update UI in main thread
             wx.CallAfter(self.handle_ai_response, response)
         except Exception as e:
@@ -133,24 +138,107 @@ class AIAssistantPanel(wx.Panel):
         self.send_button.Enable()
         self.send_button.SetLabel("Send")
     
-    def get_screenplay_context(self):
-        """Get context from the current screenplay"""
-        # This would extract relevant context from the current screenplay
-        # For now, return a placeholder
-        return "Current screenplay context would be extracted here"
+    def get_current_screenplay(self):
+        """Get the current screenplay object"""
+        try:
+            # Access current screenplay through the main frame
+            if hasattr(self.gd, 'mainFrame') and self.gd.mainFrame:
+                if hasattr(self.gd.mainFrame, 'panel') and self.gd.mainFrame.panel:
+                    if hasattr(self.gd.mainFrame.panel, 'ctrl') and self.gd.mainFrame.panel.ctrl:
+                        return self.gd.mainFrame.panel.ctrl.sp
+            return None
+        except Exception as e:
+            print(f"Error accessing screenplay: {e}")
+            return None
+    
+    def get_screenplay_context(self, user_message):
+        """Get context from the current screenplay based on user query"""
+        sp = self.get_current_screenplay()
+        if not sp:
+            return "No screenplay loaded."
+        
+        context_parts = []
+        
+        # Basic script info
+        context_parts.append(f"SCRIPT INFO:")
+        context_parts.append(f"- Total lines: {len(sp.lines)}")
+        context_parts.append(f"- Characters: {len(sp.getCharacterNames())}")
+        context_parts.append(f"- Scenes: {len(sp.getSceneLocations())}")
+        context_parts.append(f"- Current page: {sp.line2page(sp.line) if sp.line < len(sp.lines) else 'N/A'}")
+        
+        # Character list
+        characters = list(sp.getCharacterNames().keys())
+        if characters:
+            context_parts.append(f"\nCHARACTERS:")
+            context_parts.append(", ".join(characters[:10]))  # Limit to first 10
+            if len(characters) > 10:
+                context_parts.append(f"... and {len(characters) - 10} more")
+        
+        # Current scene context
+        try:
+            current_scene_start, current_scene_end = sp.getSceneIndexesFromLine(sp.line)
+            current_scene_text = ""
+            for i in range(current_scene_start, min(current_scene_end + 1, len(sp.lines))):
+                line = sp.lines[i]
+                if line.lt == sp.SCENE and line.lb == sp.LB_LAST:
+                    current_scene_text = line.text
+                    break
+            
+            if current_scene_text:
+                context_parts.append(f"\nCURRENT SCENE: {current_scene_text}")
+        except:
+            pass
+        
+        # Add full script if user requests it or asks for analysis
+        analysis_keywords = ['analyze', 'full script', 'entire script', 'whole script', 'complete script']
+        if any(keyword in user_message.lower() for keyword in analysis_keywords):
+            try:
+                # Get script text (limit to reasonable size)
+                script_text = sp.generateText(False)
+                if len(script_text) > 8000:  # Limit context size
+                    script_text = script_text[:8000] + "\n\n[Script truncated for length]"
+                context_parts.append(f"\nFULL SCRIPT:\n{script_text}")
+            except Exception as e:
+                context_parts.append(f"\n[Error getting full script: {e}]")
+        
+        return "\n".join(context_parts)
     
     def analyze_screenplay(self):
         """Analyze the current screenplay and provide insights"""
-        # This would perform actual analysis
-        # For now, return demo analysis
-        analysis = "Screenplay Analysis:\n\n"
-        analysis += "• Characters: 3 main characters detected\n"
-        analysis += "• Scenes: 5 scenes identified\n"
-        analysis += "• Dialogue: Good balance between action and dialogue\n"
-        analysis += "• Structure: Standard three-act structure detected\n\n"
-        analysis += "Suggestions:\n"
-        analysis += "• Consider adding more character development in Act 2\n"
-        analysis += "• The opening scene could be more engaging\n"
-        analysis += "• Dialogue feels natural and flows well"
+        sp = self.get_current_screenplay()
+        if not sp:
+            return "No screenplay loaded for analysis."
+        
+        analysis = "SCREENPLAY ANALYSIS:\n\n"
+        
+        # Basic stats
+        total_lines = len(sp.lines)
+        characters = list(sp.getCharacterNames().keys())
+        scenes = sp.getSceneLocations()
+        
+        analysis += f"• Total lines: {total_lines}\n"
+        analysis += f"• Characters: {len(characters)} ({', '.join(characters[:5])}{'...' if len(characters) > 5 else ''})\n"
+        analysis += f"• Scenes: {len(scenes)}\n"
+        
+        # Element breakdown
+        element_counts = {}
+        for line in sp.lines:
+            element_type = line.lt
+            element_counts[element_type] = element_counts.get(element_type, 0) + 1
+        
+        analysis += f"• Action lines: {element_counts.get(sp.ACTION, 0)}\n"
+        analysis += f"• Dialogue lines: {element_counts.get(sp.DIALOGUE, 0)}\n"
+        analysis += f"• Scene headings: {element_counts.get(sp.SCENE, 0)}\n"
+        
+        # Suggestions
+        analysis += "\nSUGGESTIONS:\n"
+        if len(characters) < 3:
+            analysis += "• Consider adding more characters for richer interactions\n"
+        if len(scenes) < 5:
+            analysis += "• You might want to develop more scenes for a complete story\n"
+        if element_counts.get(sp.ACTION, 0) < element_counts.get(sp.DIALOGUE, 0):
+            analysis += "• Good balance between action and dialogue\n"
+        else:
+            analysis += "• Consider adding more dialogue to balance the action-heavy content\n"
         
         return analysis 

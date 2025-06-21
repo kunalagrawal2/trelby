@@ -22,14 +22,13 @@ class AIService:
         self.client = anthropic.Anthropic(api_key=api_key)
         print("Debug: Claude client initialized successfully")
     
-    def get_response(self, user_message):
-        """Get a response from Claude"""
+    def get_response(self, user_message, context=""):
+        """Get a response from Claude with optional document context"""
         try:
             print(f"Debug: Attempting API call with model: claude-3-5-sonnet-20241022")
-            response = self.client.messages.create(
-                model="claude-3-5-sonnet-20241022",
-                max_tokens=500,  # Reduced from 1000 for faster responses
-                system="""You are an expert AI assistant specializing in screenwriting and creative storytelling. Your role is to help writers develop compelling narratives, characters, and dialogue.
+            
+            # Build system prompt with context
+            system_prompt = """You are an expert AI assistant specializing in screenwriting and creative storytelling. Your role is to help writers develop compelling narratives, characters, and dialogue.
 
 CORE BEHAVIORS:
 - Provide specific, actionable writing advice based on established screenwriting principles
@@ -57,7 +56,23 @@ RESPONSE STYLE:
 - Provide specific examples and actionable suggestions
 - Keep responses focused and practical
 - Ask follow-up questions to better understand the writer's goals
-- Maintain a collaborative, supportive tone throughout the conversation""",
+- Maintain a collaborative, supportive tone throughout the conversation
+
+DOCUMENT CONTEXT:
+- When provided with screenplay context, use it to give more specific, relevant advice
+- Reference specific characters, scenes, or elements from the script when appropriate
+- Provide context-aware suggestions that build on what's already written
+- If the context shows a complete script, offer comprehensive analysis and suggestions
+- If the context shows a partial script, focus on development and expansion ideas"""
+
+            # Add document context if provided
+            if context and context.strip():
+                system_prompt += f"\n\nCURRENT SCREENPLAY CONTEXT:\n{context}"
+            
+            response = self.client.messages.create(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=500,  # Reduced from 1000 for faster responses
+                system=system_prompt,
                 messages=[
                     {
                         "role": "user",
