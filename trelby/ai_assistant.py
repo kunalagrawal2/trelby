@@ -17,18 +17,61 @@ class AIAssistantPanel(wx.Panel):
         # Get appearance-aware colors
         self.colors = get_ai_pane_colors()
         
+        # Available services and models
+        self.available_services = {
+            "anthropic": [
+                "claude-3-5-sonnet-20241022",
+                "claude-3-5-haiku-20241022",
+                "claude-3-opus-20240229",
+                "claude-3-sonnet-20240229",
+                "claude-3-haiku-20240307"
+            ],
+            "groq": [
+                "llama3-8b-8192",
+                "llama3-70b-8192",
+                "mixtral-8x7b-32768",
+                "gemma2-9b-it",
+                "llama2-70b-4096"
+            ]
+        }
+        
         # Initialize AI service
         try:
             from trelby.ai_service import AIService
-            self.ai_service = AIService()
+            self.ai_service = AIService(service_name="anthropic", model="claude-3-5-sonnet-20241022")
             self.ai_available = True
+            self.current_service = "anthropic"
         except Exception as e:
             self.ai_service = None
             self.ai_available = False
-            print(f"AI Service not available: {e}")
+            self.current_service = None
         
         # Create the main sizer
         main_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # Create service and model selection area
+        selection_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        
+        service_label = wx.StaticText(self, -1, "Service:")
+        service_label.SetForegroundColour(self.colors['text'])
+        
+        self.service_choice = wx.Choice(self, -1, choices=list(self.available_services.keys()))
+        self.service_choice.SetSelection(0)  # Default to first service
+        self.service_choice.SetBackgroundColour(self.colors['input_background'])
+        self.service_choice.SetForegroundColour(self.colors['input_text'])
+        
+        model_label = wx.StaticText(self, -1, "Model:")
+        model_label.SetForegroundColour(self.colors['text'])
+        
+        self.model_choice = wx.Choice(self, -1, choices=self.available_services["anthropic"])
+        self.model_choice.SetSelection(0)  # Default to first model
+        self.model_choice.SetBackgroundColour(self.colors['input_background'])
+        self.model_choice.SetForegroundColour(self.colors['input_text'])
+        
+        selection_sizer.Add(service_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        selection_sizer.Add(self.service_choice, 1, wx.EXPAND | wx.RIGHT, 10)
+        selection_sizer.Add(model_label, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 5)
+        selection_sizer.Add(self.model_choice, 1, wx.EXPAND)
         
         # Create chat display area
         self.chat_display = wx.TextCtrl(
@@ -59,6 +102,7 @@ class AIAssistantPanel(wx.Panel):
         input_sizer.Add(self.send_button, 0, wx.EXPAND)
         
         # Add to main sizer
+        main_sizer.Add(selection_sizer, 0, wx.EXPAND | wx.ALL, 5)
         main_sizer.Add(self.chat_display, 1, wx.EXPAND | wx.ALL, 5)
         main_sizer.Add(input_sizer, 0, wx.EXPAND | wx.ALL, 5)
         
@@ -67,14 +111,59 @@ class AIAssistantPanel(wx.Panel):
         # Bind events
         self.send_button.Bind(wx.EVT_BUTTON, self.OnSend)
         self.input_text.Bind(wx.EVT_TEXT_ENTER, self.OnSend)
+        self.service_choice.Bind(wx.EVT_CHOICE, self.OnServiceChange)
+        self.model_choice.Bind(wx.EVT_CHOICE, self.OnModelChange)
         
         # Add welcome message
         if self.ai_available:
-            welcome_msg = "Hello! I'm your AI writing assistant powered by Claude. I can help you with:\n\n• Character development\n• Plot suggestions\n• Dialogue improvements\n• Scene structure\n• Genre-specific advice\n\nI have access to your current screenplay and can provide context-aware feedback. What would you like to work on today?"
+            welcome_msg = "Hello! I'm your AI writing assistant. I can help you with:\n\n• Character development\n• Plot suggestions\n• Dialogue improvements\n• Scene structure\n• Genre-specific advice\n\nI have access to your current screenplay and can provide context-aware feedback. What would you like to work on today?"
         else:
             welcome_msg = "AI Assistant is not available. Please check your API key configuration in the .env file."
         
         self.add_message("AI Assistant", welcome_msg, is_user=False)
+    
+    def OnServiceChange(self, event):
+        """Handle service selection change"""
+        if not self.ai_available:
+            return
+            
+        selected_service = self.service_choice.GetString(self.service_choice.GetSelection())
+        
+        # Update model choices for the selected service
+        models = self.available_services[selected_service]
+        self.model_choice.Clear()
+        for model in models:
+            self.model_choice.Append(model)
+        self.model_choice.SetSelection(0)
+        
+        # Update current service
+        self.current_service = selected_service
+        
+        # Try to create new service with first model
+        try:
+            from trelby.ai_service import AIService
+            self.ai_service = AIService(service_name=selected_service, model=models[0])
+            self.add_message("AI Assistant", f"Switched to {selected_service} with {models[0]}. How can I help you?", is_user=False)
+        except Exception as e:
+            self.add_message("AI Assistant", f"Error switching to {selected_service}: {str(e)}", is_user=False)
+    
+    def OnModelChange(self, event):
+        """Handle model selection change"""
+        if not self.ai_available:
+            return
+            
+        selected_service = self.service_choice.GetString(self.service_choice.GetSelection())
+        selected_model = self.model_choice.GetString(self.model_choice.GetSelection())
+        
+        try:
+            # Create new AI service with selected model
+            from trelby.ai_service import AIService
+            self.ai_service = AIService(service_name=selected_service, model=selected_model)
+            
+            # Add system message about model change
+            self.add_message("AI Assistant", f"Switched to {selected_model}. How can I help you?", is_user=False)
+        except Exception as e:
+            self.add_message("AI Assistant", f"Error switching to {selected_model}: {str(e)}", is_user=False)
     
     def refresh_appearance(self):
         """Refresh colors when system appearance changes"""
@@ -92,6 +181,15 @@ class AIAssistantPanel(wx.Panel):
         self.send_button.SetBackgroundColour(self.colors['button_background'])
         self.send_button.SetForegroundColour(self.colors['button_text'])
         self.send_button.Refresh()
+        
+        # Update choice colors
+        self.service_choice.SetBackgroundColour(self.colors['input_background'])
+        self.service_choice.SetForegroundColour(self.colors['input_text'])
+        self.service_choice.Refresh()
+        
+        self.model_choice.SetBackgroundColour(self.colors['input_background'])
+        self.model_choice.SetForegroundColour(self.colors['input_text'])
+        self.model_choice.Refresh()
         
         # Refresh the panel itself
         self.Refresh()
@@ -156,16 +254,6 @@ class AIAssistantPanel(wx.Panel):
             # Note: The current user message hasn't been added to chat_history yet
             conversation_history = self.chat_history.copy()
             
-            # Debug logging
-            print(f"Debug: Sending conversation with {len(conversation_history)} previous messages")
-            if conversation_history:
-                recent_messages = conversation_history[-6:]  # Last 6 messages
-                print(f"Debug: Recent conversation:")
-                for msg in recent_messages:
-                    sender = "User" if msg['is_user'] else "AI"
-                    preview = msg['message'][:50] + "..." if len(msg['message']) > 50 else msg['message']
-                    print(f"  {sender}: {preview}")
-            
             # Get AI response with context and conversation history
             response = self.ai_service.get_response(user_message, context, conversation_history)
             
@@ -191,7 +279,6 @@ class AIAssistantPanel(wx.Panel):
                         return self.gd.mainFrame.panel.ctrl.sp
             return None
         except Exception as e:
-            print(f"Error accessing screenplay: {e}")
             return None
     
     def get_screenplay_context(self, user_message):
