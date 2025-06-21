@@ -299,6 +299,7 @@ class MyFrame(wx.Frame):
             m.Append(ID_EDIT_PASTE, "Paste")
             m.AppendSeparator()
             m.Append(ID_AI_ADD_TO_CHAT, "Add to AI Chat")
+            m.Append(ID_AI_REWRITE, "Rewrite with AI")
 
             self.Bind(wx.EVT_MENU, self.OnNewScript, id=ID_FILE_NEW)
             self.Bind(wx.EVT_MENU, self.OnOpen, id=ID_FILE_OPEN)
@@ -342,6 +343,7 @@ class MyFrame(wx.Frame):
             self.Bind(wx.EVT_MENU, self.ToggleFullscreen, id=ID_VIEW_FULL_SCREEN)
             self.Bind(wx.EVT_MENU, self.OnClearAIConversation, id=ID_VIEW_CLEAR_AI_CONVERSATION)
             self.Bind(wx.EVT_MENU, self.OnAddToAIChat, id=ID_AI_ADD_TO_CHAT)
+            self.Bind(wx.EVT_MENU, self.OnAIRewrite, id=ID_AI_REWRITE)
             self.Bind(wx.EVT_MENU, self.OnFindNextError, id=ID_SCRIPT_FIND_ERROR)
             self.Bind(wx.EVT_MENU, self.OnPaginate, id=ID_SCRIPT_PAGINATE)
             self.Bind(
@@ -995,3 +997,24 @@ class MyFrame(wx.Frame):
                 wx.OK | wx.ICON_INFORMATION,
                 self
             )
+
+    def OnAIRewrite(self, event=None):
+        """Handle AI rewrite menu item selection"""
+        # Get the current control and selected text
+        current_ctrl = self.panel.ctrl
+        selected_text = current_ctrl.get_selected_text()
+        
+        if not selected_text or not selected_text.strip():
+            wx.MessageBox(
+                "Please select some text to rewrite with AI.",
+                "No Text Selected",
+                wx.OK | wx.ICON_INFORMATION,
+                self
+            )
+            return
+        
+        # Create and show the AI rewrite dialog
+        from trelby.ai_rewrite_dialog import AIRewriteDialog
+        dialog = AIRewriteDialog(self, selected_text, current_ctrl)
+        dialog.ShowModal()
+        dialog.Destroy()

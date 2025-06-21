@@ -733,6 +733,26 @@ class MyCtrl(wx.Control):
     def OnCopy(self):
         self.OnCut(doDelete=False)
 
+    def get_selected_text(self):
+        """Get the currently selected text as a string"""
+        cd = self.sp.getSelectedAsCD(False)
+        
+        if not cd:
+            return ""
+        
+        # Convert the selected content to text
+        tmpSp = screenplay.Screenplay(self.gd.cfgGl)
+        tmpSp.lines = cd.lines
+        
+        s = util.String()
+        for ln in tmpSp.lines:
+            txt = ln.text
+            if tmpSp.cfg.getType(ln.lt).export.isCaps:
+                txt = util.upper(txt)
+            s += txt + config.lb2str(ln.lb)
+        
+        return str(s)
+
     def OnCopySystem(self, formatted=False):
         cd = self.sp.getSelectedAsCD(False)
 
