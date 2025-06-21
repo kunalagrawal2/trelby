@@ -20,6 +20,7 @@ import trelby.splash as splash
 import trelby.util as util
 from trelby.ids import *
 from trelby.trelbypanel import MyPanel
+from trelby.ai_assistant import AIAssistantPanel
 
 
 def getCfgGui():
@@ -126,7 +127,11 @@ class MyFrame(wx.Frame):
 
         viewMenu.AppendSeparator()
         viewMenu.AppendCheckItem(ID_VIEW_SHOW_FORMATTING, "&Show formatting")
+        viewMenu.AppendCheckItem(ID_VIEW_AI_ASSISTANT, "&AI Assistant")
         viewMenu.Append(ID_VIEW_FULL_SCREEN, "&Fullscreen\tF11")
+        
+        # Set AI Assistant to be visible by default
+        viewMenu.Check(ID_VIEW_AI_ASSISTANT, True)
 
         scriptMenu = wx.Menu()
         scriptMenu.Append(ID_SCRIPT_FIND_ERROR, "&Find next error")
@@ -240,8 +245,20 @@ class MyFrame(wx.Frame):
 
         vsizer.Add(hsizer, 0, wx.EXPAND)
 
-        tmp = misc.MyTabCtrl2(self, -1, self.tabCtrl)
-        vsizer.Add(tmp, 1, wx.EXPAND)
+        # Create splitter window for main content and AI assistant
+        self.mainSplitter = wx.SplitterWindow(self, -1, style=wx.SP_3D | wx.SP_LIVE_UPDATE)
+        
+        # Left side: Script editor
+        self.scriptPanel = misc.MyTabCtrl2(self.mainSplitter, -1, self.tabCtrl)
+        
+        # Right side: AI Assistant
+        self.aiAssistantPanel = AIAssistantPanel(self.mainSplitter, self.gd)
+        
+        # Split the window (70% script, 30% AI assistant)
+        self.mainSplitter.SplitVertically(self.scriptPanel, self.aiAssistantPanel, 700)
+        self.mainSplitter.SetMinimumPaneSize(200)
+        
+        vsizer.Add(self.mainSplitter, 1, wx.EXPAND)
 
         vsizer.Add(wx.StaticLine(self, -1), 0, wx.EXPAND)
 
@@ -315,15 +332,16 @@ class MyFrame(wx.Frame):
             self.Bind(wx.EVT_MENU, self.OnViewModeChange, id=ID_VIEW_STYLE_LAYOUT)
             self.Bind(wx.EVT_MENU, self.OnViewModeChange, id=ID_VIEW_STYLE_SIDE_BY_SIDE)
             self.Bind(wx.EVT_MENU, self.OnShowFormatting, id=ID_VIEW_SHOW_FORMATTING)
+            self.Bind(wx.EVT_MENU, self.ToggleAIAssistant, id=ID_VIEW_AI_ASSISTANT)
             self.Bind(wx.EVT_MENU, self.ToggleFullscreen, id=ID_VIEW_FULL_SCREEN)
             self.Bind(wx.EVT_MENU, self.OnFindNextError, id=ID_SCRIPT_FIND_ERROR)
             self.Bind(wx.EVT_MENU, self.OnPaginate, id=ID_SCRIPT_PAGINATE)
             self.Bind(
                 wx.EVT_MENU, self.OnAutoCompletionDlg, id=ID_SCRIPT_AUTO_COMPLETION
             )
+            self.Bind(wx.EVT_MENU, self.OnTitlesDlg, id=ID_SCRIPT_TITLES)
             self.Bind(wx.EVT_MENU, self.OnHeadersDlg, id=ID_SCRIPT_HEADERS)
             self.Bind(wx.EVT_MENU, self.OnLocationsDlg, id=ID_SCRIPT_LOCATIONS)
-            self.Bind(wx.EVT_MENU, self.OnTitlesDlg, id=ID_SCRIPT_TITLES)
             self.Bind(
                 wx.EVT_MENU,
                 self.OnSpellCheckerScriptDictionaryDlg,
@@ -769,6 +787,25 @@ class MyFrame(wx.Frame):
         self.noFSBtn.Show(not self.IsFullScreen())
         self.ShowFullScreen(not self.IsFullScreen(), wx.FULLSCREEN_ALL)
         self.panel.ctrl.SetFocus()
+
+    def ToggleAIAssistant(self, event=None):
+        """Toggle the AI Assistant panel visibility"""
+        is_checked = self.menuBar.IsChecked(ID_VIEW_AI_ASSISTANT)
+        
+        if is_checked:
+            # Show AI assistant
+            if not self.mainSplitter.IsSplit():
+                # Split the window if not already split
+                self.mainSplitter.SplitVertically(self.scriptPanel, self.aiAssistantPanel, 700)
+            self.aiAssistantPanel.Show()
+        else:
+            # Hide AI assistant
+            self.aiAssistantPanel.Hide()
+            if self.mainSplitter.IsSplit():
+                self.mainSplitter.Unsplit(self.aiAssistantPanel)
+        
+        self.mainSplitter.Layout()
+        self.Layout()
 
     def OnPaginate(self, event=None):
         self.panel.ctrl.OnPaginate()
