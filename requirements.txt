@@ -4,5 +4,10 @@ lxml
 reportlab
 pytest>=7.0
 anthropic
-python-dotenv
+python-dotenv>=0.19.0
 groq
+lmnt>=0.1.0
+requests
+pygame>=2.0.0
+# Optional audio libraries (install if needed for audio playback):
+# pyaudio
