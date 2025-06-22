@@ -4,6 +4,7 @@ import wx
 import time
 import threading
 from trelby.appearance_utils import get_ai_pane_colors
+from trelby.ai_suggestion import AISuggestionManager
 
 class AIAssistantPanel(wx.Panel):
     """Basic AI Assistant Panel similar to Cursor's chat interface"""
@@ -16,6 +17,9 @@ class AIAssistantPanel(wx.Panel):
         
         # Get appearance-aware colors
         self.colors = get_ai_pane_colors()
+        
+        # Initialize AI Suggestion Manager
+        self.suggestion_manager = AISuggestionManager(wx.GetApp().GetTopWindow(), self.get_screenplay_ctrl())
         
         # Initialize AI service
         try:
@@ -177,7 +181,14 @@ class AIAssistantPanel(wx.Panel):
     
     def handle_ai_response(self, response):
         """Handle AI response in main thread"""
-        self.add_message("AI Assistant", response, is_user=False)
+        # Heuristic to detect if the response is a screenplay suggestion
+        is_suggestion = "INT." in response or "EXT." in response or "SCENE START" in response
+
+        if is_suggestion:
+            self.suggestion_manager.insert_suggestion(response)
+        else:
+            self.add_message("AI Assistant", response, is_user=False)
+
         self.send_button.Enable()
         self.send_button.SetLabel("Send")
     
@@ -215,6 +226,18 @@ class AIAssistantPanel(wx.Panel):
             return None
         except Exception as e:
             print(f"Error accessing screenplay: {e}")
+            return None
+    
+    def get_screenplay_ctrl(self):
+        """Get the screenplay control object"""
+        try:
+            # Access current screenplay control through the main frame
+            if hasattr(self.gd, 'mainFrame') and self.gd.mainFrame:
+                if hasattr(self.gd.mainFrame, 'panel') and self.gd.mainFrame.panel:
+                    return self.gd.mainFrame.panel.ctrl
+            return None
+        except Exception as e:
+            print(f"Error accessing screenplay control: {e}")
             return None
     
     def get_screenplay_context(self, user_message):

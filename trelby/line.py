@@ -8,7 +8,7 @@ from trelby.screenplay import ACTION, LB_LAST
 
 # one line in a screenplay
 class Line:
-    def __init__(self, lb=LB_LAST, lt=ACTION, text=""):
+    def __init__(self, lb=LB_LAST, lt=ACTION, text="", is_suggestion=False):
 
         # line break type
         self.lb = lb
@@ -18,6 +18,9 @@ class Line:
 
         # text
         self.text = text
+
+        # whether this line is an AI suggestion
+        self.is_suggestion = is_suggestion
 
     def __str__(self):
         return config.lb2char(self.lb) + config.lt2char(self.lt) + self.text

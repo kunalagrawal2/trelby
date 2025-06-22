@@ -4,7 +4,7 @@ import wx
 import threading
 from trelby.screenplay_formatter import fix_formatting
 
-class AIRewriteDialog(wx.Dialog):
+class AIRewrite(wx.Dialog):
     """Dialog for AI text rewriting with accept/reject functionality"""
     
     def __init__(self, parent, ai_service, original_text):
@@ -141,35 +141,35 @@ class AIRewriteDialog(wx.Dialog):
                 # Get user instructions
                 instructions = self.instructions_text.GetValue().strip()
                 
-                # Create a specific prompt for screenplay rewriting
-                if instructions:
-                    prompt = f"""Please rewrite the following text according to these specific instructions: "{instructions}"
+                # Create a more specific and reliable prompt for screenplay rewriting
+                prompt = f"""You are an expert screenplay rewriter and formatter.
+Rewrite the following text based on the user's instructions.
+Then, format the result using Fountain markup.
 
-IMPORTANT: Return ONLY the rewritten screenplay content. Do not include:
-- Explanations or commentary
-- "Here's the rewritten version:" or similar phrases
-- "Yes!" or other conversational responses
-- Key points or summaries
-- Any text that isn't part of the actual screenplay
+Fountain formatting rules:
+- Scene headings: Start with # (e.g., "# INT. ROOM - DAY")
+- Character names: Start with @ (e.g., "@JOHN")
+- Dialogue: Regular text after character name (no special markup)
+- Parentheticals: In parentheses (e.g., "(whispering)")
+- Transitions: Start with > (e.g., "> FADE OUT")
+- Action: Regular text (no special markup)
+- Notes: Between /* and */ (e.g., "/* This is a note */")
 
-Just return the pure screenplay text that should replace the original selection.
+IMPORTANT FORMATTING GUIDELINES:
+1. Scene headings should be in ALL CAPS: INT./EXT. LOCATION - TIME
+2. Character names should be in ALL CAPS
+3. Transitions should be in ALL CAPS
+4. Dialogue should follow character names without any special markup
+5. Parentheticals should be on their own line after character names
+6. Action lines should be regular text with no markup
+7. Maintain proper screenplay structure and flow
 
-Original text to rewrite:
-{self.original_text}"""
-                else:
-                    prompt = f"""Please rewrite the following text to improve clarity, flow, and impact while maintaining the same meaning and tone. 
-
-IMPORTANT: Return ONLY the rewritten screenplay content. Do not include:
-- Explanations or commentary
-- "Here's the rewritten version:" or similar phrases
-- "Yes!" or other conversational responses
-- Key points or summaries
-- Any text that isn't part of the actual screenplay
-
-Just return the pure screenplay text that should replace the original selection.
+User instructions: "{instructions if instructions else 'Improve clarity, flow, and impact while maintaining proper screenplay formatting.'}"
 
 Original text to rewrite:
-{self.original_text}"""
+{self.original_text}
+
+Return ONLY the rewritten, Fountain-formatted screenplay content. No commentary or explanations."""
                 
                 # Get AI response
                 response = self.ai_service.get_response(prompt)
@@ -214,8 +214,8 @@ Original text to rewrite:
             # Use the existing cut functionality to delete selected text
             current_ctrl.OnCut(doDelete=True, copyToClip=False)
             
-            # Use intelligent formatting to create properly formatted lines
-            lines = fix_formatting(new_text)
+            # Use intelligent formatting with AI service to create properly formatted lines
+            lines = fix_formatting(new_text, self.ai_service)
             
             # Use Trelby's paste functionality to insert the formatted text
             if lines:
