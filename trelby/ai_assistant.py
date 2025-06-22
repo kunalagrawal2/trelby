@@ -474,6 +474,9 @@ class AIAssistantPanel(wx.Panel):
             # Check if screenplay has changed
             if current_hash == self.current_screenplay_hash:
                 print("Debug: Screenplay unchanged, embeddings are up to date")
+                # Update AI service hash to maintain cache consistency
+                if self.ai_service:
+                    self.ai_service.update_screenplay_hash(current_hash)
                 return True
             
             print(f"Debug: Screenplay changed, updating embeddings")
@@ -484,6 +487,9 @@ class AIAssistantPanel(wx.Panel):
             success = self.process_screenplay_embeddings_sync(screenplay)
             if success:
                 self.current_screenplay_hash = current_hash
+                # Update AI service hash to maintain cache consistency
+                if self.ai_service:
+                    self.ai_service.update_screenplay_hash(current_hash)
                 return True
             else:
                 print("Debug: Failed to update embeddings")
@@ -506,7 +512,7 @@ class AIAssistantPanel(wx.Panel):
             if self.ai_service:
                 print("Debug: Clearing existing embeddings...")
                 self.ai_service.clear_embeddings()
-                # Clear system prompt cache for new screenplay
+                # Clear system prompt cache and query cache for new screenplay
                 self.ai_service.clear_system_prompt_cache()
             
             # Store new embeddings

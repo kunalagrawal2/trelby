@@ -17,48 +17,75 @@ class AIService:
     """
     
     def __init__(self, collection_name: str = "screenplay_embeddings"):
+        """
+        Initialize AI service with Claude and OpenAI embeddings.
+        
+        Args:
+            collection_name: Name of ChromaDB collection for embeddings
+        """
         print("Debug: Initializing AIService...")
         
         # Load environment variables
-        load_dotenv()
-        print("Debug: Environment variables loaded")
+        self._load_env_variables()
         
         # Initialize Claude client
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-        if not anthropic_key:
-            raise ValueError("ANTHROPIC_API_KEY not found in .env file or environment variables.")
-        print(f"Debug: Anthropic API key found (length: {len(anthropic_key)} chars)")
-        
-        self.claude_client = anthropic.Anthropic(api_key=anthropic_key)
-        print("Debug: Claude client initialized successfully")
+        self._init_claude_client()
         
         # Initialize OpenAI client for embeddings
-        self.openai_key = self._get_openai_key_from_env_file()
-        if not self.openai_key:
-            raise ValueError("OPENAI_API_KEY not found in .env file or environment variables.")
-        print(f"Debug: OpenAI API key found (length: {len(self.openai_key)} chars)")
-        
-        self.openai_client = openai.OpenAI(api_key=self.openai_key)
-        print("Debug: OpenAI client initialized with model: text-embedding-3-large")
+        self._init_openai_client()
         
         # Initialize ChromaDB
-        self.collection_name = collection_name
-        print(f"Debug: Initializing ChromaDB with collection: {collection_name}")
+        self._init_chromadb(collection_name)
         
-        try:
-            self.chroma_client = chromadb.PersistentClient(path="./chroma_db")
-            self.collection = self.chroma_client.get_or_create_collection(name=collection_name)
-            print(f"Debug: Created new ChromaDB collection: {collection_name}")
-        except Exception as e:
-            print(f"Debug: Error initializing ChromaDB: {e}")
-            raise
-        
-        # Cache for system prompt to avoid rebuilding on every call
+        # Cache for system prompts and embeddings
         self.cached_system_prompt = None
         self.cached_semantic_context = None
         self.cached_document_context = None
         
+        # Query embedding cache to avoid recreating embeddings for every search
+        self.query_embedding_cache = {}
+        self.last_screenplay_hash = None
+        
         print("Debug: AIService initialization complete")
+    
+    def _load_env_variables(self):
+        """Load environment variables from .env file"""
+        print("Debug: Environment variables loaded")
+        load_dotenv()
+    
+    def _init_claude_client(self):
+        """Initialize Claude client with API key from .env"""
+        try:
+            api_key = os.getenv('ANTHROPIC_API_KEY')
+            if not api_key:
+                raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
+            
+            print(f"Debug: Anthropic API key found (length: {len(api_key)} chars)")
+            self.claude_client = anthropic.Anthropic(api_key=api_key)
+            print("Debug: Claude client initialized successfully")
+        except Exception as e:
+            print(f"Debug: Failed to initialize Claude client: {e}")
+            raise
+    
+    def _init_openai_client(self):
+        """Initialize OpenAI client with API key from .env"""
+        try:
+            # Try to get API key from .env file first
+            api_key = self._get_openai_key_from_env_file()
+            if not api_key:
+                # Fallback to environment variable
+                api_key = os.getenv('OPENAI_API_KEY')
+            
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY not found in .env file or environment variables")
+            
+            print(f"Debug: OpenAI API key found (length: {len(api_key)} chars)")
+            self.openai_client = openai.OpenAI(api_key=api_key)
+            self.embedding_model = "text-embedding-3-large"
+            print(f"Debug: OpenAI client initialized with model: {self.embedding_model}")
+        except Exception as e:
+            print(f"Debug: Failed to initialize OpenAI client: {e}")
+            raise
     
     def _get_openai_key_from_env_file(self):
         """Read OpenAI API key directly from .env file, ignoring environment variables."""
@@ -190,10 +217,10 @@ class AIService:
             return []
         
         try:
-            print(f"Debug: Calling OpenAI embeddings API with model: text-embedding-3-large")
+            print(f"Debug: Calling OpenAI embeddings API with model: {self.embedding_model}")
             response = self.openai_client.embeddings.create(
                 input=texts,
-                model="text-embedding-3-large"
+                model=self.embedding_model
             )
             embeddings = [embedding.embedding for embedding in response.data]
             print(f"Debug: Successfully created {len(embeddings)} embeddings")
@@ -339,14 +366,24 @@ class AIService:
         print(f"Debug: Requesting {n_results} results")
         
         try:
-            # Create embedding for query
-            print("Debug: Creating query embedding...")
-            query_embeddings = self.create_embeddings([query])
+            # Check if query embedding is cached
+            query_hash = hash(query)
+            if query_hash in self.query_embedding_cache:
+                print("Debug: Query embedding found in cache")
+                query_embeddings = self.query_embedding_cache[query_hash]
+            else:
+                print("Debug: Query embedding not found in cache, creating new embedding")
+                query_embeddings = self.create_embeddings([query])
+                if query_embeddings:
+                    # Cache the embedding for future use
+                    self.query_embedding_cache[query_hash] = query_embeddings
+                    print("Debug: Query embedding cached for future use")
+            
             if not query_embeddings:
                 print("Debug: Failed to create query embedding")
                 return None
             
-            print("Debug: Query embedding created successfully")
+            print("Debug: Query embedding ready for search")
             
             # Search in ChromaDB
             print("Debug: Searching ChromaDB...")
@@ -620,8 +657,37 @@ CONVERSATION MEMORY:
             return False
     
     def clear_system_prompt_cache(self):
-        """Clear the cached system prompt when screenplay changes."""
-        print("Debug: Clearing system prompt cache (screenplay changed)")
+        """Clear cached system prompt and contexts"""
+        print("Debug: Clearing system prompt cache")
         self.cached_system_prompt = None
         self.cached_semantic_context = None
-        self.cached_document_context = None 
+        self.cached_document_context = None
+        self.query_embedding_cache = {}
+        self.last_screenplay_hash = None
+    
+    def clear_query_cache(self):
+        """Clear the query embedding cache"""
+        print("Debug: Clearing query embedding cache")
+        self.query_embedding_cache = {}
+    
+    def update_screenplay_hash(self, screenplay_hash):
+        """Update the screenplay hash and clear caches if it changed"""
+        if screenplay_hash != self.last_screenplay_hash:
+            print("Debug: Screenplay hash changed, clearing caches")
+            self.clear_system_prompt_cache()
+            self.last_screenplay_hash = screenplay_hash
+        else:
+            print("Debug: Screenplay hash unchanged, keeping caches")
+    
+    def _init_chromadb(self, collection_name: str):
+        """Initialize ChromaDB with the specified collection"""
+        self.collection_name = collection_name
+        print(f"Debug: Initializing ChromaDB with collection: {collection_name}")
+        
+        try:
+            self.chroma_client = chromadb.PersistentClient(path="./chroma_db")
+            self.collection = self.chroma_client.get_or_create_collection(name=collection_name)
+            print(f"Debug: Created new ChromaDB collection: {collection_name}")
+        except Exception as e:
+            print(f"Debug: Error initializing ChromaDB: {e}")
+            raise 
