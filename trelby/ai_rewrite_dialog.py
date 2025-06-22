@@ -2,34 +2,24 @@
 
 import wx
 import threading
-import re
+from trelby.screenplay_formatter import fix_formatting
 
 class AIRewriteDialog(wx.Dialog):
     """Dialog for AI text rewriting with accept/reject functionality"""
     
-    def __init__(self, parent, original_text, ctrl):
+    def __init__(self, parent, ai_service, original_text):
         wx.Dialog.__init__(self, parent, -1, "AI Rewrite", size=(700, 500))
         
         self.original_text = original_text
-        self.ctrl = ctrl
+        self.ai_service = ai_service
         self.ai_suggestion = ""
-        
-        # Initialize AI service
-        try:
-            from trelby.ai_service import AIService
-            self.ai_service = AIService()
-            self.ai_available = True
-        except Exception as e:
-            self.ai_service = None
-            self.ai_available = False
-            print(f"AI Service not available: {e}")
         
         self.init_ui()
         
         # Start AI rewrite in background
-        if self.ai_available:
+        if self.ai_service:
             self.get_ai_rewrite()
-    
+        
     def init_ui(self):
         """Initialize the user interface"""
         main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -181,22 +171,23 @@ Original text to rewrite:
     def replace_selected_text(self, new_text):
         """Replace the selected text with new text"""
         try:
+            # Get the current control from the parent frame
+            current_ctrl = self.GetParent().panel.ctrl
+            
             # Get the current selection
-            cd = self.ctrl.sp.getSelectedAsCD(False)
+            cd = current_ctrl.sp.getSelectedAsCD(False)
             if not cd:
                 return
             
             # Use the existing cut functionality to delete selected text
-            # This will also copy it to clipboard, but that's fine
-            self.ctrl.OnCut(doDelete=True, copyToClip=False)
+            current_ctrl.OnCut(doDelete=True, copyToClip=False)
             
-            # Format the text using the screenplay formatter
-            from trelby.screenplay_formatter import fix_formatting
+            # Use intelligent formatting to create properly formatted lines
             lines = fix_formatting(new_text)
             
             # Use Trelby's paste functionality to insert the formatted text
             if lines:
-                self.ctrl.sp.paste(lines)
+                current_ctrl.sp.paste(lines)
             
         except Exception as e:
             wx.MessageBox(

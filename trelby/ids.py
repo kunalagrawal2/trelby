@@ -81,6 +81,7 @@ ID_ELEM_TO_ACTBREAK = wx.NewId()
 ID_ELEM_TO_TRANSITION = wx.NewId()
 ID_AI_ADD_TO_CHAT = wx.NewId()
 ID_AI_REWRITE = wx.NewId()
+ID_FORMAT_AS_SCREENPLAY = wx.NewId()
 
 idToLTMap = {
     ID_ELEM_TO_SCENE: screenplay.SCENE,

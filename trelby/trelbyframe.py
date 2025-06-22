@@ -300,6 +300,7 @@ class MyFrame(wx.Frame):
             m.AppendSeparator()
             m.Append(ID_AI_ADD_TO_CHAT, "Add to AI Chat")
             m.Append(ID_AI_REWRITE, "Rewrite with AI")
+            m.Append(ID_FORMAT_AS_SCREENPLAY, "Format as Screenplay")
 
             self.Bind(wx.EVT_MENU, self.OnNewScript, id=ID_FILE_NEW)
             self.Bind(wx.EVT_MENU, self.OnOpen, id=ID_FILE_OPEN)
@@ -344,6 +345,7 @@ class MyFrame(wx.Frame):
             self.Bind(wx.EVT_MENU, self.OnClearAIConversation, id=ID_VIEW_CLEAR_AI_CONVERSATION)
             self.Bind(wx.EVT_MENU, self.OnAddToAIChat, id=ID_AI_ADD_TO_CHAT)
             self.Bind(wx.EVT_MENU, self.OnAIRewrite, id=ID_AI_REWRITE)
+            self.Bind(wx.EVT_MENU, self.OnFormatAsScreenplay, id=ID_FORMAT_AS_SCREENPLAY)
             self.Bind(wx.EVT_MENU, self.OnFindNextError, id=ID_SCRIPT_FIND_ERROR)
             self.Bind(wx.EVT_MENU, self.OnPaginate, id=ID_SCRIPT_PAGINATE)
             self.Bind(
@@ -1013,8 +1015,59 @@ class MyFrame(wx.Frame):
             )
             return
         
+        # Check if AI assistant is available
+        if not hasattr(self, 'aiAssistantPanel') or not self.aiAssistantPanel:
+            wx.MessageBox(
+                "AI Assistant is not available. Please enable it from View > AI Assistant.",
+                "AI Assistant Not Available",
+                wx.OK | wx.ICON_INFORMATION,
+                self
+            )
+            return
+        
         # Create and show the AI rewrite dialog
         from trelby.ai_rewrite_dialog import AIRewriteDialog
-        dialog = AIRewriteDialog(self, selected_text, current_ctrl)
+        dialog = AIRewriteDialog(self, self.aiAssistantPanel.ai_service, selected_text)
         dialog.ShowModal()
         dialog.Destroy()
+
+    def OnFormatAsScreenplay(self, event=None):
+        """Handle Format as Screenplay menu item selection"""
+        # Get the current control and selected text
+        current_ctrl = self.panel.ctrl
+        selected_text = current_ctrl.get_selected_text()
+        
+        if not selected_text or not selected_text.strip():
+            wx.MessageBox(
+                "Please select some text to format as screenplay.",
+                "No Text Selected",
+                wx.OK | wx.ICON_INFORMATION,
+                self
+            )
+            return
+        
+        # Format the selected text using intelligent formatting
+        try:
+            # Get the current selection
+            cd = current_ctrl.sp.getSelectedAsCD(False)
+            if not cd:
+                return
+            
+            # Use the existing cut functionality to delete selected text
+            current_ctrl.OnCut(doDelete=True, copyToClip=False)
+            
+            # Use intelligent formatting to create properly formatted lines
+            from trelby.screenplay_formatter import fix_formatting
+            lines = fix_formatting(selected_text)
+            
+            # Use Trelby's paste functionality to insert the formatted text
+            if lines:
+                current_ctrl.sp.paste(lines)
+                
+        except Exception as e:
+            wx.MessageBox(
+                f"Error formatting text: {str(e)}",
+                "Error",
+                wx.OK | wx.ICON_ERROR,
+                self
+            )
