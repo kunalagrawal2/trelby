@@ -24,36 +24,39 @@ class EnhancedAIService:
         print("Debug: Environment variables loaded")
         
         # Initialize Claude client
-        anthropic_key = os.getenv('ANTHROPIC_API_KEY')
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
         if not anthropic_key:
-            raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
-        
+            raise ValueError("ANTHROPIC_API_KEY not found in .env file or environment variables.")
         print(f"Debug: Anthropic API key found (length: {len(anthropic_key)} chars)")
+        
         self.claude_client = anthropic.Anthropic(api_key=anthropic_key)
-        print(f"Debug: Claude client initialized successfully")
+        print("Debug: Claude client initialized successfully")
         
         # Initialize OpenAI client for embeddings
-        openai_key = self._get_openai_key_from_env_file()
-        if not openai_key:
-            raise ValueError("OPENAI_API_KEY not found in .env file")
+        self.openai_key = self._get_openai_key_from_env_file()
+        if not self.openai_key:
+            raise ValueError("OPENAI_API_KEY not found in .env file or environment variables.")
+        print(f"Debug: OpenAI API key found (length: {len(self.openai_key)} chars)")
         
-        print(f"Debug: OpenAI API key found (length: {len(openai_key)} chars)")
-        self.openai_client = openai.OpenAI(api_key=openai_key)
-        self.embedding_model = "text-embedding-3-large"
-        print(f"Debug: OpenAI client initialized with model: {self.embedding_model}")
+        self.openai_client = openai.OpenAI(api_key=self.openai_key)
+        print("Debug: OpenAI client initialized with model: text-embedding-3-large")
         
         # Initialize ChromaDB
-        print(f"Debug: Initializing ChromaDB with collection: {collection_name}")
-        self.chroma_client = chromadb.Client()
         self.collection_name = collection_name
+        print(f"Debug: Initializing ChromaDB with collection: {collection_name}")
         
         try:
-            self.collection = self.chroma_client.get_collection(name=collection_name)
-            print(f"Debug: Connected to existing ChromaDB collection: {collection_name}")
-        except Exception as e:
-            print(f"Debug: Creating new ChromaDB collection: {collection_name} (error: {e})")
-            self.collection = self.chroma_client.create_collection(name=collection_name)
+            self.chroma_client = chromadb.PersistentClient(path="./chroma_db")
+            self.collection = self.chroma_client.get_or_create_collection(name=collection_name)
             print(f"Debug: Created new ChromaDB collection: {collection_name}")
+        except Exception as e:
+            print(f"Debug: Error initializing ChromaDB: {e}")
+            raise
+        
+        # Cache for system prompt to avoid rebuilding on every call
+        self.cached_system_prompt = None
+        self.cached_semantic_context = None
+        self.cached_document_context = None
         
         print("Debug: EnhancedAIService initialization complete")
     
@@ -187,10 +190,10 @@ class EnhancedAIService:
             return []
         
         try:
-            print(f"Debug: Calling OpenAI embeddings API with model: {self.embedding_model}")
+            print(f"Debug: Calling OpenAI embeddings API with model: text-embedding-3-large")
             response = self.openai_client.embeddings.create(
                 input=texts,
-                model=self.embedding_model
+                model="text-embedding-3-large"
             )
             embeddings = [embedding.embedding for embedding in response.data]
             print(f"Debug: Successfully created {len(embeddings)} embeddings")
@@ -430,9 +433,17 @@ class EnhancedAIService:
             semantic_context = self.get_semantic_context(user_message)
             print(f"Debug: Semantic context length: {len(semantic_context)} characters")
             
-            # Build system prompt
-            print("Debug: Building system prompt...")
-            system_prompt = """You are an expert AI assistant specializing in screenwriting and creative storytelling. Your role is to help writers develop compelling narratives, characters, and dialogue.
+            # Check if we need to rebuild the system prompt
+            need_rebuild = (
+                self.cached_system_prompt is None or
+                self.cached_semantic_context != semantic_context or
+                self.cached_document_context != context
+            )
+            
+            if need_rebuild:
+                print("Debug: Rebuilding system prompt (context changed or first time)")
+                # Build system prompt
+                system_prompt = """You are an expert AI assistant specializing in screenwriting and creative storytelling. Your role is to help writers develop compelling narratives, characters, and dialogue.
 
 CORE BEHAVIORS:
 - Provide specific, actionable writing advice based on established screenwriting principles
@@ -482,17 +493,24 @@ CONVERSATION MEMORY:
 - Maintain continuity in your advice and suggestions
 - Don't repeat information already discussed unless specifically asked"""
 
-            # Add semantic context if available
-            if semantic_context:
-                system_prompt += f"\n\n{semantic_context}"
-                print("Debug: Added semantic context to system prompt")
-            
-            # Add document context if provided
-            if context and context.strip():
-                system_prompt += f"\n\nCURRENT SCREENPLAY CONTEXT:\n{context}"
-                print("Debug: Added document context to system prompt")
-            
-            print(f"Debug: Final system prompt length: {len(system_prompt)} characters")
+                # Add semantic context if available
+                if semantic_context:
+                    system_prompt += f"\n\n{semantic_context}"
+                    print("Debug: Added semantic context to system prompt")
+                
+                # Add document context if provided
+                if context and context.strip():
+                    system_prompt += f"\n\nCURRENT SCREENPLAY CONTEXT:\n{context}"
+                    print("Debug: Added document context to system prompt")
+                
+                # Cache the system prompt and contexts
+                self.cached_system_prompt = system_prompt
+                self.cached_semantic_context = semantic_context
+                self.cached_document_context = context
+                
+                print(f"Debug: Cached new system prompt (length: {len(system_prompt)} characters)")
+            else:
+                print("Debug: Using cached system prompt (no context changes)")
             
             # Build messages array with conversation history
             messages = []
@@ -522,7 +540,7 @@ CONVERSATION MEMORY:
             response = self.claude_client.messages.create(
                 model="claude-3-5-sonnet-20241022",
                 max_tokens=500,
-                system=system_prompt,
+                system=self.cached_system_prompt,
                 messages=messages
             )
             
@@ -564,4 +582,11 @@ CONVERSATION MEMORY:
             return True
         except Exception as e:
             print(f"Debug: Error clearing embeddings: {e}")
-            return False 
+            return False
+    
+    def clear_system_prompt_cache(self):
+        """Clear the cached system prompt when screenplay changes."""
+        print("Debug: Clearing system prompt cache (screenplay changed)")
+        self.cached_system_prompt = None
+        self.cached_semantic_context = None
+        self.cached_document_context = None 

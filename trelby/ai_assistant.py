@@ -20,9 +20,6 @@ class AIAssistantPanel(wx.Panel):
         # Get appearance-aware colors
         self.colors = get_ai_pane_colors()
         
-        # Initialize AI Suggestion Manager
-        self.suggestion_manager = AISuggestionManager(wx.GetApp().GetTopWindow(), self.get_screenplay_ctrl())
-        
         # Initialize Enhanced AI service
         try:
             from trelby.ai_service_enhanced import EnhancedAIService
@@ -194,6 +191,8 @@ class AIAssistantPanel(wx.Panel):
                 if self.ai_service:
                     print("Debug: Clearing existing embeddings...")
                     self.ai_service.clear_embeddings()
+                    # Clear system prompt cache for new screenplay
+                    self.ai_service.clear_system_prompt_cache()
                 
                 # Store new embeddings
                 print("Debug: Storing new screenplay embeddings...")
@@ -338,13 +337,8 @@ class AIAssistantPanel(wx.Panel):
     
     def handle_ai_response(self, response):
         """Handle AI response in main thread"""
-        # Heuristic to detect if the response is a screenplay suggestion
-        is_suggestion = "INT." in response or "EXT." in response or "SCENE START" in response
-
-        if is_suggestion:
-            self.suggestion_manager.insert_suggestion(response)
-        else:
-            self.add_message("AI Assistant", response, is_user=False)
+        # Always show as regular message (insertion feature removed)
+        self.add_message("AI Assistant", response, is_user=False)
 
         self.send_button.Enable()
         self.send_button.SetLabel("Send")
