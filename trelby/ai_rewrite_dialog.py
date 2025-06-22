@@ -16,9 +16,7 @@ class AIRewriteDialog(wx.Dialog):
         
         self.init_ui()
         
-        # Start AI rewrite in background
-        if self.ai_service:
-            self.get_ai_rewrite()
+        # Don't start AI rewrite automatically - wait for user instructions
         
     def init_ui(self):
         """Initialize the user interface"""
@@ -56,7 +54,7 @@ class AIRewriteDialog(wx.Dialog):
         main_sizer.Add(suggestion_label, 0, wx.ALL, 10)
         
         self.suggestion_text_ctrl = wx.TextCtrl(
-            self, -1, "Generating AI suggestion...",
+            self, -1, "Enter instructions above and click 'Generate Rewrite' to get an AI suggestion.",
             style=wx.TE_MULTILINE | wx.TE_READONLY,
             size=(-1, 120)
         )
@@ -64,6 +62,10 @@ class AIRewriteDialog(wx.Dialog):
         
         # Buttons
         button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        
+        self.generate_button = wx.Button(self, -1, "Generate Rewrite")
+        self.generate_button.Bind(wx.EVT_BUTTON, self.OnGenerate)
+        button_sizer.Add(self.generate_button, 0, wx.ALL, 5)
         
         self.accept_button = wx.Button(self, wx.ID_OK, "Accept")
         self.accept_button.Disable()
@@ -84,14 +86,40 @@ class AIRewriteDialog(wx.Dialog):
         self.regenerate_button.Bind(wx.EVT_BUTTON, self.OnRegenerate)
         self.accept_button.Bind(wx.EVT_BUTTON, self.OnAccept)
         
-        # Bind instructions text change to enable regenerate button
+        # Bind instructions text change to enable generate button
         self.instructions_text.Bind(wx.EVT_TEXT, self.OnInstructionsChanged)
     
     def OnInstructionsChanged(self, event):
-        """Enable regenerate button when instructions change"""
-        if self.ai_suggestion and self.instructions_text.GetValue().strip():
+        """Enable generate button when instructions are provided"""
+        instructions = self.instructions_text.GetValue().strip()
+        self.generate_button.Enable(bool(instructions))
+        
+        # Enable regenerate button if we have both instructions and a suggestion
+        if instructions and self.ai_suggestion:
             self.regenerate_button.Enable()
+        else:
+            self.regenerate_button.Disable()
+        
         event.Skip()
+    
+    def OnGenerate(self, event):
+        """Generate AI rewrite based on instructions"""
+        instructions = self.instructions_text.GetValue().strip()
+        if not instructions:
+            wx.MessageBox("Please enter instructions for the rewrite.", "No Instructions", wx.OK | wx.ICON_INFORMATION)
+            return
+        
+        # Disable buttons during generation
+        self.generate_button.Disable()
+        self.generate_button.SetLabel("Generating...")
+        self.accept_button.Disable()
+        self.regenerate_button.Disable()
+        
+        # Update suggestion text
+        self.suggestion_text_ctrl.SetValue("Generating AI suggestion...")
+        
+        # Start AI generation
+        self.get_ai_rewrite()
     
     def OnRegenerate(self, event):
         """Regenerate AI suggestion with new instructions"""
@@ -163,6 +191,10 @@ Original text to rewrite:
         self.ai_suggestion = suggestion
         self.suggestion_text_ctrl.SetValue(suggestion)
         self.accept_button.Enable()
+        
+        # Re-enable generate button and reset its label
+        self.generate_button.Enable()
+        self.generate_button.SetLabel("Generate Rewrite")
         
         # Enable regenerate button if there are instructions
         if self.instructions_text.GetValue().strip():
