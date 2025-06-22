@@ -1,7 +1,11 @@
+# -*- coding: utf-8 -*-
+
 import io
 import re
 import zipfile
 from typing import List, Optional
+import tempfile
+import os
 
 import wx
 from lxml import etree
@@ -15,6 +19,9 @@ import trelby.util as util
 from trelby.importdlg import ImportDlg
 from trelby.indent import Indent
 from trelby.line import Line
+from . import misc as misc_unicode
+from . import screenplay as screenplay_unicode
+from . import util as util_unicode
 
 # special linetype that means that indent contains action and scene lines,
 # and scene lines are the ones that begin with "EXT." or "INT."

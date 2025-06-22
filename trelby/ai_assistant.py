@@ -7,13 +7,15 @@ from trelby.appearance_utils import get_ai_pane_colors
 from trelby.ai_suggestion import AISuggestionManager
 
 class AIAssistantPanel(wx.Panel):
-    """Basic AI Assistant Panel similar to Cursor's chat interface"""
+    """Enhanced AI Assistant Panel with automatic semantic search capabilities"""
     
     def __init__(self, parent, gd):
         wx.Panel.__init__(self, parent, -1)
         
         self.gd = gd
         self.chat_history = []
+        self.embeddings_initialized = False
+        self.current_screenplay_hash = None
         
         # Get appearance-aware colors
         self.colors = get_ai_pane_colors()
@@ -21,18 +23,24 @@ class AIAssistantPanel(wx.Panel):
         # Initialize AI Suggestion Manager
         self.suggestion_manager = AISuggestionManager(wx.GetApp().GetTopWindow(), self.get_screenplay_ctrl())
         
-        # Initialize AI service
+        # Initialize Enhanced AI service
         try:
-            from trelby.ai_service import AIService
-            self.ai_service = AIService()
+            from trelby.ai_service_enhanced import EnhancedAIService
+            self.ai_service = EnhancedAIService()
             self.ai_available = True
+            print("✓ Enhanced AI service initialized with embeddings")
         except Exception as e:
             self.ai_service = None
             self.ai_available = False
-            print(f"AI Service not available: {e}")
+            print(f"Enhanced AI Service not available: {e}")
         
         # Create the main sizer
         main_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # Create status bar for embedding info
+        self.status_bar = wx.StaticText(self, -1, "Initializing...")
+        self.status_bar.SetFont(wx.Font(8, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        main_sizer.Add(self.status_bar, 0, wx.EXPAND | wx.ALL, 2)
         
         # Create chat display area
         self.chat_display = wx.TextCtrl(
@@ -74,11 +82,161 @@ class AIAssistantPanel(wx.Panel):
         
         # Add welcome message
         if self.ai_available:
-            welcome_msg = "Hello! I'm your AI writing assistant powered by Claude. I can help you with:\n\n• Character development\n• Plot suggestions\n• Dialogue improvements\n• Scene structure\n• Genre-specific advice\n\nI have access to your current screenplay and can provide context-aware feedback. What would you like to work on today?"
+            welcome_msg = "Hello! I'm your enhanced AI writing assistant powered by Claude with automatic semantic search. I can help you with:\n\n• Character development and analysis\n• Plot suggestions and story structure\n• Dialogue improvements and character voice\n• Scene analysis and pacing\n• Finding patterns and connections in your script\n• Genre-specific advice and conventions\n\nI automatically analyze your screenplay to understand its context and provide more relevant suggestions. What would you like to work on today?"
         else:
-            welcome_msg = "AI Assistant is not available. Please check your API key configuration in the .env file."
+            welcome_msg = "Enhanced AI Assistant is not available. Please check your API key configuration in the .env file."
         
         self.add_message("AI Assistant", welcome_msg, is_user=False)
+        
+        # Start monitoring for screenplay changes
+        self.start_screenplay_monitoring()
+    
+    def start_screenplay_monitoring(self):
+        """Start monitoring for screenplay changes to automatically update embeddings"""
+        print("Debug: Starting screenplay monitoring...")
+        
+        def monitor_thread():
+            print("Debug: Screenplay monitoring thread started")
+            last_hash = None
+            last_log_time = 0
+            
+            while True:
+                try:
+                    screenplay = self.get_current_screenplay()
+                    if screenplay:
+                        # Create a simple hash of the screenplay content to detect changes
+                        screenplay_hash = self.get_screenplay_hash(screenplay)
+                        
+                        if screenplay_hash != last_hash:
+                            print(f"Debug: Screenplay change detected")
+                            print(f"Debug: Old hash: {last_hash}")
+                            print(f"Debug: New hash: {screenplay_hash}")
+                            
+                            last_hash = screenplay_hash
+                            self.current_screenplay_hash = screenplay_hash
+                            status_msg = "New screenplay detected, processing for semantic search..."
+                            print(f"Debug: Setting status: {status_msg}")
+                            self.update_status(status_msg)
+                            
+                            # Process the new screenplay
+                            print("Debug: Processing new screenplay...")
+                            self.process_screenplay_embeddings(screenplay)
+                        else:
+                            # Only log occasionally to avoid spam (every 60 seconds)
+                            current_time = time.time()
+                            if current_time - last_log_time > 60:
+                                print("Debug: No screenplay changes detected (monitoring active)")
+                                last_log_time = current_time
+                    else:
+                        # Only log occasionally when no screenplay is available
+                        current_time = time.time()
+                        if current_time - last_log_time > 30:
+                            print("Debug: No screenplay available for monitoring")
+                            last_log_time = current_time
+                    
+                    time.sleep(5)  # Check every 5 seconds instead of 2
+                except Exception as e:
+                    print(f"Debug: Error in screenplay monitoring: {e}")
+                    print(f"Debug: Exception type: {type(e)}")
+                    import traceback
+                    print(f"Debug: Monitor traceback: {traceback.format_exc()}")
+                    time.sleep(10)  # Wait longer on error
+        
+        # Start background monitoring thread
+        print("Debug: Starting background monitoring thread")
+        thread = threading.Thread(target=monitor_thread)
+        thread.daemon = True
+        thread.start()
+        print("Debug: Background monitoring thread started")
+    
+    def get_screenplay_hash(self, screenplay):
+        """Create a simple hash of the screenplay content to detect changes"""
+        try:
+            if not hasattr(screenplay, 'lines'):
+                print("Debug: Screenplay has no lines attribute")
+                return None
+            
+            # Use the first 1000 characters and total line count as a simple hash
+            content = ""
+            line_count = len(screenplay.lines)
+            
+            for i, line in enumerate(screenplay.lines):
+                if i < 50:  # First 50 lines
+                    content += line.text
+                if len(content) > 1000:
+                    break
+            
+            hash_input = content + str(line_count)
+            hash_result = hash(hash_input)
+            
+            # Only log hash details when there's a significant change
+            if not hasattr(self, '_last_hash_log') or self._last_hash_log != hash_result:
+                print(f"Debug: Hash calculation - {line_count} lines, {len(content)} chars, hash: {hash_result}")
+                self._last_hash_log = hash_result
+            
+            return hash_result
+        except Exception as e:
+            print(f"Debug: Error calculating screenplay hash: {e}")
+            print(f"Debug: Exception type: {type(e)}")
+            return None
+    
+    def process_screenplay_embeddings(self, screenplay):
+        """Process screenplay embeddings in background thread"""
+        def process_thread():
+            try:
+                print("Debug: Starting screenplay embedding processing in background thread")
+                print(f"Debug: Screenplay object type: {type(screenplay)}")
+                print(f"Debug: Screenplay has 'lines' attribute: {hasattr(screenplay, 'lines')}")
+                if hasattr(screenplay, 'lines'):
+                    print(f"Debug: Screenplay has {len(screenplay.lines)} lines")
+                
+                # Clear existing embeddings first
+                if self.ai_service:
+                    print("Debug: Clearing existing embeddings...")
+                    self.ai_service.clear_embeddings()
+                
+                # Store new embeddings
+                print("Debug: Storing new screenplay embeddings...")
+                success = self.ai_service.store_screenplay_embeddings(screenplay)
+                print(f"Debug: Embedding storage result: {success}")
+                
+                if success:
+                    # Get collection info
+                    print("Debug: Getting collection info...")
+                    info = self.ai_service.get_collection_info()
+                    print(f"Debug: Collection info: {info}")
+                    
+                    self.embeddings_initialized = True
+                    status_msg = f"✓ Semantic search ready ({info['document_count']} scenes analyzed)"
+                    print(f"Debug: Setting status: {status_msg}")
+                    self.update_status(status_msg)
+                    
+                    # Add a helpful message to the chat
+                    chat_msg = f"Screenplay analyzed! I can now help you with character development, plot analysis, scene structure, and finding patterns in your {info['document_count']} scenes."
+                    print(f"Debug: Adding chat message: {chat_msg}")
+                    self.add_message("System", chat_msg, is_user=False)
+                else:
+                    print("Debug: Embedding storage failed, setting error status")
+                    self.update_status("⚠ Semantic search not available")
+                    self.embeddings_initialized = False
+            except Exception as e:
+                print(f"Debug: Exception in embedding processing: {e}")
+                print(f"Debug: Exception type: {type(e)}")
+                import traceback
+                print(f"Debug: Traceback: {traceback.format_exc()}")
+                self.update_status(f"Error processing screenplay: {e}")
+                self.embeddings_initialized = False
+        
+        # Start background thread
+        print("Debug: Starting background thread for embedding processing")
+        thread = threading.Thread(target=process_thread)
+        thread.daemon = True
+        thread.start()
+        print("Debug: Background thread started")
+    
+    def update_status(self, message):
+        """Update the status bar message"""
+        wx.CallAfter(self.status_bar.SetLabel, message)
     
     def refresh_appearance(self):
         """Refresh colors when system appearance changes"""
@@ -151,17 +309,16 @@ class AIAssistantPanel(wx.Panel):
             self.send_button.SetLabel("Send")
     
     def get_ai_response(self, user_message):
-        """Get response from Claude in background thread"""
+        """Get response from Claude in background thread with semantic search"""
         try:
-            # Get document context
-            context = self.get_screenplay_context(user_message)
+            # Get document context (simplified for enhanced service)
+            context = self.get_basic_context()
             
-            # Get conversation history (all previous messages)
-            # Note: The current user message hasn't been added to chat_history yet
+            # Get conversation history
             conversation_history = self.chat_history.copy()
             
             # Debug logging
-            print(f"Debug: Sending conversation with {len(conversation_history)} previous messages")
+            print(f"Debug: Sending enhanced conversation with {len(conversation_history)} previous messages")
             if conversation_history:
                 recent_messages = conversation_history[-6:]  # Last 6 messages
                 print(f"Debug: Recent conversation:")
@@ -170,7 +327,7 @@ class AIAssistantPanel(wx.Panel):
                     preview = msg['message'][:50] + "..." if len(msg['message']) > 50 else msg['message']
                     print(f"  {sender}: {preview}")
             
-            # Get AI response with context and conversation history
+            # Get AI response with semantic search context
             response = self.ai_service.get_response(user_message, context, conversation_history)
             
             # Update UI in main thread
@@ -240,8 +397,48 @@ class AIAssistantPanel(wx.Panel):
             print(f"Error accessing screenplay control: {e}")
             return None
     
+    def get_basic_context(self):
+        """Get basic context from the current screenplay"""
+        sp = self.get_current_screenplay()
+        if not sp:
+            return "No screenplay loaded."
+        
+        context_parts = []
+        
+        # Basic script info
+        context_parts.append(f"SCRIPT INFO:")
+        context_parts.append(f"- Total lines: {len(sp.lines)}")
+        context_parts.append(f"- Characters: {len(sp.getCharacterNames())}")
+        context_parts.append(f"- Scenes: {len(sp.getSceneLocations())}")
+        context_parts.append(f"- Current page: {sp.line2page(sp.line) if sp.line < len(sp.lines) else 'N/A'}")
+        
+        # Character list
+        characters = list(sp.getCharacterNames().keys())
+        if characters:
+            context_parts.append(f"\nCHARACTERS:")
+            context_parts.append(", ".join(characters[:10]))  # Limit to first 10
+            if len(characters) > 10:
+                context_parts.append(f"... and {len(characters) - 10} more")
+        
+        # Current scene context
+        try:
+            current_scene_start, current_scene_end = sp.getSceneIndexesFromLine(sp.line)
+            current_scene_text = ""
+            for i in range(current_scene_start, min(current_scene_end + 1, len(sp.lines))):
+                line = sp.lines[i]
+                if line.lt == sp.SCENE and line.lb == sp.LB_LAST:
+                    current_scene_text = line.text
+                    break
+            
+            if current_scene_text:
+                context_parts.append(f"\nCURRENT SCENE: {current_scene_text}")
+        except:
+            pass
+        
+        return "\n".join(context_parts)
+    
     def get_screenplay_context(self, user_message):
-        """Get context from the current screenplay based on user query"""
+        """Get context from the current screenplay based on user query (legacy method)"""
         sp = self.get_current_screenplay()
         if not sp:
             return "No screenplay loaded."
@@ -277,52 +474,8 @@ class AIAssistantPanel(wx.Panel):
                 
                 return "\n".join(context_parts)
         
-        # Fall back to original method if no selection
-        context_parts = []
-        
-        # Basic script info
-        context_parts.append(f"SCRIPT INFO:")
-        context_parts.append(f"- Total lines: {len(sp.lines)}")
-        context_parts.append(f"- Characters: {len(sp.getCharacterNames())}")
-        context_parts.append(f"- Scenes: {len(sp.getSceneLocations())}")
-        context_parts.append(f"- Current page: {sp.line2page(sp.line) if sp.line < len(sp.lines) else 'N/A'}")
-        
-        # Character list
-        characters = list(sp.getCharacterNames().keys())
-        if characters:
-            context_parts.append(f"\nCHARACTERS:")
-            context_parts.append(", ".join(characters[:10]))  # Limit to first 10
-            if len(characters) > 10:
-                context_parts.append(f"... and {len(characters) - 10} more")
-        
-        # Current scene context
-        try:
-            current_scene_start, current_scene_end = sp.getSceneIndexesFromLine(sp.line)
-            current_scene_text = ""
-            for i in range(current_scene_start, min(current_scene_end + 1, len(sp.lines))):
-                line = sp.lines[i]
-                if line.lt == sp.SCENE and line.lb == sp.LB_LAST:
-                    current_scene_text = line.text
-                    break
-            
-            if current_scene_text:
-                context_parts.append(f"\nCURRENT SCENE: {current_scene_text}")
-        except:
-            pass
-        
-        # Add full script if user requests it or asks for analysis
-        analysis_keywords = ['analyze', 'full script', 'entire script', 'whole script', 'complete script']
-        if any(keyword in user_message.lower() for keyword in analysis_keywords):
-            try:
-                # Get script text (limit to reasonable size)
-                script_text = sp.generateText(False)
-                if len(script_text) > 8000:  # Limit context size
-                    script_text = script_text[:8000] + "\n\n[Script truncated for length]"
-                context_parts.append(f"\nFULL SCRIPT:\n{script_text}")
-            except Exception as e:
-                context_parts.append(f"\n[Error getting full script: {e}]")
-        
-        return "\n".join(context_parts)
+        # Fall back to basic context
+        return self.get_basic_context()
     
     def get_selected_text(self):
         """Get the currently selected text from the screenplay"""
@@ -348,6 +501,19 @@ class AIAssistantPanel(wx.Panel):
             return selected_text
         
         return None
+    
+    def clear_conversation_history(self):
+        """Clear the conversation history"""
+        self.chat_history = []
+        self.chat_display.SetValue("")
+        
+        # Add welcome message back
+        if self.ai_available:
+            welcome_msg = "Conversation cleared. I'm ready to help you with your screenplay!"
+        else:
+            welcome_msg = "Conversation cleared. AI service is not available."
+        
+        self.add_message("AI Assistant", welcome_msg, is_user=False)
     
     def analyze_screenplay(self):
         """Analyze the current screenplay and provide insights"""
@@ -375,6 +541,13 @@ class AIAssistantPanel(wx.Panel):
         analysis += f"• Action lines: {element_counts.get(sp.ACTION, 0)}\n"
         analysis += f"• Dialogue lines: {element_counts.get(sp.DIALOGUE, 0)}\n"
         analysis += f"• Scene headings: {element_counts.get(sp.SCENE, 0)}\n"
+        
+        # Embedding status
+        if self.embeddings_initialized:
+            info = self.ai_service.get_collection_info()
+            analysis += f"• Semantic search: {info['document_count']} scenes analyzed\n"
+        else:
+            analysis += "• Semantic search: Processing...\n"
         
         # Suggestions
         analysis += "\nSUGGESTIONS:\n"
