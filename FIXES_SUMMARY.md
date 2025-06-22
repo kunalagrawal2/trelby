@@ -16,7 +16,7 @@ Debug: Added scene 3 with similarity -0.374
 - Old calculation: `similarity = 1 - distance` (gave negative values)
 - New calculation: `similarity = 1 - (distance / 2)` (gives 0-1 range)
 
-**Fix Applied**: Updated `get_semantic_context()` method in `ai_service_enhanced.py`
+**Fix Applied**: Updated `get_semantic_context()` method in `ai_service.py`
 
 ### 2. **Excessive Hash Calculation** ❌ FIXED
 **Problem**: Hash function was being called every 2 seconds, creating spam

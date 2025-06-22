@@ -27,14 +27,14 @@ The AI assistant has been enhanced with automatic semantic search capabilities u
 
 ### Files Modified/Created
 
-1. **`trelby/ai_service_enhanced.py`** - New enhanced AI service with embedding capabilities
+1. **`trelby/ai_service.py`** - Enhanced AI service with embedding capabilities
 2. **`trelby/ai_assistant.py`** - Updated AI assistant panel with automatic processing
 3. **`trelby/embedding_service.py`** - OpenAI embedding service (existing)
 4. **`trelby/embedding_storage.py`** - ChromaDB storage service (existing)
 
 ### Key Components
 
-#### EnhancedAIService
+#### AIService
 - Handles both Claude API calls and OpenAI embeddings
 - Manages ChromaDB collection for semantic search
 - Provides scene chunking and metadata extraction

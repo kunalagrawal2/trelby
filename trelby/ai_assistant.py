@@ -3,11 +3,13 @@
 import wx
 import time
 import threading
+import hashlib
+from trelby.ai_service import AIService
 from trelby.appearance_utils import get_ai_pane_colors
 from trelby.ai_suggestion import AISuggestionManager
 
 class AIAssistantPanel(wx.Panel):
-    """Enhanced AI Assistant Panel with automatic semantic search capabilities"""
+    """AI Assistant Panel with automatic semantic search capabilities"""
     
     def __init__(self, parent, gd):
         wx.Panel.__init__(self, parent, -1)
@@ -20,16 +22,15 @@ class AIAssistantPanel(wx.Panel):
         # Get appearance-aware colors
         self.colors = get_ai_pane_colors()
         
-        # Initialize Enhanced AI service
+        # Initialize AI service
         try:
-            from trelby.ai_service_enhanced import EnhancedAIService
-            self.ai_service = EnhancedAIService()
+            self.ai_service = AIService()
             self.ai_available = True
-            print("✓ Enhanced AI service initialized with embeddings")
+            print("✓ AI service initialized with embeddings")
         except Exception as e:
             self.ai_service = None
             self.ai_available = False
-            print(f"Enhanced AI Service not available: {e}")
+            print(f"AI Service not available: {e}")
         
         # Create the main sizer
         main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -79,9 +80,9 @@ class AIAssistantPanel(wx.Panel):
         
         # Add welcome message
         if self.ai_available:
-            welcome_msg = "Hello! I'm your enhanced AI writing assistant powered by Claude with automatic semantic search. I can help you with:\n\n• Character development and analysis\n• Plot suggestions and story structure\n• Dialogue improvements and character voice\n• Scene analysis and pacing\n• Finding patterns and connections in your script\n• Genre-specific advice and conventions\n\nI automatically analyze your screenplay to understand its context and provide more relevant suggestions. What would you like to work on today?"
+            welcome_msg = "Hello! I'm your AI writing assistant powered by Claude with automatic semantic search. I can help you with:\n\n• Character development and analysis\n• Plot suggestions and story structure\n• Dialogue improvements\n• Scene analysis and suggestions\n• Story themes and motifs\n\nI'll automatically analyze your screenplay and provide context-aware suggestions!"
         else:
-            welcome_msg = "Enhanced AI Assistant is not available. Please check your API key configuration in the .env file."
+            welcome_msg = "AI Assistant is not available. Please check your API key configuration in the .env file."
         
         self.add_message("AI Assistant", welcome_msg, is_user=False)
         
@@ -310,14 +311,14 @@ class AIAssistantPanel(wx.Panel):
     def get_ai_response(self, user_message):
         """Get response from Claude in background thread with semantic search"""
         try:
-            # Get document context (simplified for enhanced service)
+            # Get document context (simplified for AI service)
             context = self.get_basic_context()
             
             # Get conversation history
             conversation_history = self.chat_history.copy()
             
             # Debug logging
-            print(f"Debug: Sending enhanced conversation with {len(conversation_history)} previous messages")
+            print(f"Debug: Sending conversation with {len(conversation_history)} previous messages")
             if conversation_history:
                 recent_messages = conversation_history[-6:]  # Last 6 messages
                 print(f"Debug: Recent conversation:")
