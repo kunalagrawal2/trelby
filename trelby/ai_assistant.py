@@ -388,6 +388,14 @@ class AIAssistantPanel(wx.Panel):
     
     def show_add_to_script_button(self, content):
         """Show a button to add AI content to the script"""
+        # Extract just the actionable content from the AI response
+        # Look for content that appears to be actual script content
+        actionable_content = self.extract_actionable_content(content)
+        
+        if not actionable_content:
+            wx.MessageBox("No actionable content found in the AI response.", "Info", wx.OK | wx.ICON_INFORMATION)
+            return
+        
         # Create a dialog with the content and options
         dialog = wx.Dialog(self, -1, "Add to Script", size=(500, 400))
         
@@ -399,7 +407,7 @@ class AIAssistantPanel(wx.Panel):
         sizer.Add(label, 0, wx.ALL, 5)
         
         # Add content text area
-        content_text = wx.TextCtrl(dialog, -1, content, 
+        content_text = wx.TextCtrl(dialog, -1, actionable_content, 
                                   style=wx.TE_MULTILINE | wx.TE_READONLY,
                                   size=(-1, 200))
         sizer.Add(content_text, 1, wx.EXPAND | wx.ALL, 5)
@@ -428,9 +436,61 @@ class AIAssistantPanel(wx.Panel):
         
         # Show dialog
         if dialog.ShowModal() == wx.ID_OK:
-            self.insert_content_to_script(content, self.insert_type.GetSelection())
+            self.insert_content_to_script(actionable_content, self.insert_type.GetSelection())
         
         dialog.Destroy()
+    
+    def extract_actionable_content(self, content):
+        """Extract just the actionable script content from the AI response"""
+        # Split content into lines
+        lines = content.split('\n')
+        actionable_lines = []
+        
+        # Look for lines that appear to be actual script content
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Skip lines that are clearly explanations or commentary
+            if any(skip_word in line.lower() for skip_word in [
+                'here\'s', 'here is', 'i suggest', 'you could', 'consider', 
+                'try this', 'example', 'suggestion', 'note:', 'tip:', 'advice:',
+                'ai assistant:', 'claude:', 'assistant:', 'user:', 'you:'
+            ]):
+                continue
+                
+            # Skip lines that are too long (likely explanations)
+            if len(line) > 100:
+                continue
+                
+            # Look for lines that look like script content
+            if any(keyword in line.lower() for keyword in [
+                'int.', 'ext.', 'scene', 'action', 'dialogue', 'character',
+                '(', ')', 'fade', 'cut', 'dissolve', 'close up', 'wide shot'
+            ]):
+                actionable_lines.append(line)
+            elif line.isupper() and len(line) > 3:  # Likely character names or scene headings
+                actionable_lines.append(line)
+            elif line.startswith('(') and line.endswith(')'):  # Parentheticals
+                actionable_lines.append(line)
+            elif len(line) < 80 and not line.startswith('Here') and not line.startswith('I '):  # Short action lines
+                actionable_lines.append(line)
+        
+        # If we found actionable content, return it
+        if actionable_lines:
+            return '\n'.join(actionable_lines)
+        
+        # If no specific content found, return the first non-empty line that's not an explanation
+        for line in lines:
+            line = line.strip()
+            if line and len(line) < 100 and not any(skip_word in line.lower() for skip_word in [
+                'here\'s', 'here is', 'i suggest', 'you could', 'consider', 
+                'try this', 'example', 'suggestion', 'note:', 'tip:', 'advice:'
+            ]):
+                return line
+        
+        return content  # Fallback to original content if nothing else works
     
     def insert_content_to_script(self, content, insert_type):
         """Insert AI-generated content into the screenplay"""
@@ -440,9 +500,6 @@ class AIAssistantPanel(wx.Panel):
             return
         
         try:
-            # Get current cursor position
-            current_line = sp.line
-            
             # Determine the line type based on selection
             line_types = {
                 0: screenplay.ACTION,      # Action Line
@@ -457,15 +514,30 @@ class AIAssistantPanel(wx.Panel):
             # Clean up the content for insertion
             cleaned_content = self.clean_content_for_insertion(content, target_type)
             
-            # Create a new Line object
+            # Split content into lines if it contains newlines
+            content_lines = cleaned_content.split('\n')
+            
+            # Create Line objects for each line
             from trelby.line import Line
-            new_line = Line(screenplay.LB_LAST, target_type, cleaned_content)
+            new_lines = []
             
-            # Insert the new line at the current position + 1
-            sp.lines.insert(current_line + 1, new_line)
+            for i, line_content in enumerate(content_lines):
+                if line_content.strip():  # Only add non-empty lines
+                    # Set line break type: LB_LAST for last line, LB_FORCED for others
+                    lb_type = screenplay.LB_LAST if i == len(content_lines) - 1 else screenplay.LB_FORCED
+                    new_line = Line(lb_type, target_type, line_content.strip())
+                    new_lines.append(new_line)
             
-            # Move cursor to the new line
-            sp.line = current_line + 1
+            # If no valid lines, create one empty line
+            if not new_lines:
+                new_lines = [Line(screenplay.LB_LAST, target_type, "")]
+            
+            # Append all new lines to the end of the screenplay
+            for new_line in new_lines:
+                sp.lines.append(new_line)
+            
+            # Move cursor to the last new line
+            sp.line = len(sp.lines) - 1
             sp.column = 0
             
             # Mark the screenplay as changed
