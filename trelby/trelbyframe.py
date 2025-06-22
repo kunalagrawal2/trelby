@@ -167,6 +167,7 @@ class MyFrame(wx.Frame):
         toolsMenu.Append(ID_TOOLS_CHARMAP, "&Character map...")
         toolsMenu.Append(ID_TOOLS_COMPARE_SCRIPTS, "C&ompare scripts...")
         toolsMenu.Append(ID_TOOLS_WATERMARK, "&Generate watermarked PDFs...")
+        toolsMenu.Append(ID_TOOLBAR_TABLE_READ, "Table Read (TTS)")
 
         helpMenu = wx.Menu()
         helpMenu.Append(ID_HELP_COMMANDS, "&Commands...")
@@ -218,6 +219,7 @@ class MyFrame(wx.Frame):
         addTB(ID_TOOLBAR_VIEWS, "layout.png", "View mode")
         addTB(ID_TOOLBAR_REPORTS, "report.png", "Script reports")
         addTB(ID_TOOLBAR_TOOLS, "tools.png", "Tools")
+        addTB(ID_TOOLBAR_TABLE_READ, "tableread.png", "Table Read (TTS)")
         addTB(ID_TOOLBAR_SETTINGS, "settings.png", "Global settings")
 
         self.toolBar.SetBackgroundColour(gd.cfgGui.tabBarBgColor)
@@ -378,6 +380,7 @@ class MyFrame(wx.Frame):
             self.Bind(wx.EVT_MENU, self.OnCharacterMap, id=ID_TOOLS_CHARMAP)
             self.Bind(wx.EVT_MENU, self.OnCompareScripts, id=ID_TOOLS_COMPARE_SCRIPTS)
             self.Bind(wx.EVT_MENU, self.OnWatermark, id=ID_TOOLS_WATERMARK)
+            self.Bind(wx.EVT_MENU, self.OnTableRead, id=ID_TOOLBAR_TABLE_READ)
             self.Bind(wx.EVT_MENU, self.OnHelpCommands, id=ID_HELP_COMMANDS)
             self.Bind(wx.EVT_MENU, self.OnHelpManual, id=ID_HELP_MANUAL)
             self.Bind(wx.EVT_MENU, self.OnAbout, id=ID_HELP_ABOUT)
@@ -1101,3 +1104,9 @@ class MyFrame(wx.Frame):
                 wx.OK | wx.ICON_ERROR,
                 self
             )
+
+    def OnTableRead(self, event=None):
+        from trelby.table_read_dialog import TableReadDialog
+        dlg = TableReadDialog(self, self.panel.ctrl.sp)
+        dlg.ShowModal()
+        dlg.Destroy()
