@@ -65,7 +65,8 @@ Input text:
 Return ONLY the Fountain-formatted text, no explanations or commentary."""
 
     try:
-        response = ai_service.get_response(prompt)
+        # Use simple response method to avoid semantic search and complex context
+        response = ai_service.get_simple_response(prompt)
         return response.strip()
     except Exception as e:
         print(f"AI formatting error: {e}")

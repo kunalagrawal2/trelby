@@ -15,22 +15,29 @@ class AIAssistantPanel(wx.Panel):
         wx.Panel.__init__(self, parent, -1)
         
         self.gd = gd
-        self.chat_history = []
+        self.ai_service = None
         self.embeddings_initialized = False
         self.current_screenplay_hash = None
-        
-        # Get appearance-aware colors
-        self.colors = get_ai_pane_colors()
+        self.processing_lock = threading.Lock()  # Keep lock for thread safety
+        self.chat_history = []  # Add back the missing chat history
         
         # Initialize AI service
         try:
             self.ai_service = AIService()
-            self.ai_available = True
             print("✓ AI service initialized with embeddings")
         except Exception as e:
+            print(f"✗ Failed to initialize AI service: {e}")
             self.ai_service = None
-            self.ai_available = False
-            print(f"AI Service not available: {e}")
+        
+        # Initialize UI
+        self.init_ui()
+        
+        # No more constant monitoring - we'll update on-demand
+    
+    def init_ui(self):
+        """Initialize the UI components"""
+        # Get appearance-aware colors
+        self.colors = get_ai_pane_colors()
         
         # Create the main sizer
         main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -79,160 +86,18 @@ class AIAssistantPanel(wx.Panel):
         self.input_text.Bind(wx.EVT_TEXT_ENTER, self.OnSend)
         
         # Add welcome message
-        if self.ai_available:
+        if self.ai_service:
             welcome_msg = "Hello! I'm your AI writing assistant powered by Claude with automatic semantic search. I can help you with:\n\n• Character development and analysis\n• Plot suggestions and story structure\n• Dialogue improvements\n• Scene analysis and suggestions\n• Story themes and motifs\n\nI'll automatically analyze your screenplay and provide context-aware suggestions!"
         else:
             welcome_msg = "AI Assistant is not available. Please check your API key configuration in the .env file."
         
         self.add_message("AI Assistant", welcome_msg, is_user=False)
-        
-        # Start monitoring for screenplay changes
-        self.start_screenplay_monitoring()
-    
-    def start_screenplay_monitoring(self):
-        """Start monitoring for screenplay changes to automatically update embeddings"""
-        print("Debug: Starting screenplay monitoring...")
-        
-        def monitor_thread():
-            print("Debug: Screenplay monitoring thread started")
-            last_hash = None
-            last_log_time = 0
-            
-            while True:
-                try:
-                    screenplay = self.get_current_screenplay()
-                    if screenplay:
-                        # Create a simple hash of the screenplay content to detect changes
-                        screenplay_hash = self.get_screenplay_hash(screenplay)
-                        
-                        if screenplay_hash != last_hash:
-                            print(f"Debug: Screenplay change detected")
-                            print(f"Debug: Old hash: {last_hash}")
-                            print(f"Debug: New hash: {screenplay_hash}")
-                            
-                            last_hash = screenplay_hash
-                            self.current_screenplay_hash = screenplay_hash
-                            status_msg = "New screenplay detected, processing for semantic search..."
-                            print(f"Debug: Setting status: {status_msg}")
-                            self.update_status(status_msg)
-                            
-                            # Process the new screenplay
-                            print("Debug: Processing new screenplay...")
-                            self.process_screenplay_embeddings(screenplay)
-                        else:
-                            # Only log occasionally to avoid spam (every 60 seconds)
-                            current_time = time.time()
-                            if current_time - last_log_time > 60:
-                                print("Debug: No screenplay changes detected (monitoring active)")
-                                last_log_time = current_time
-                    else:
-                        # Only log occasionally when no screenplay is available
-                        current_time = time.time()
-                        if current_time - last_log_time > 30:
-                            print("Debug: No screenplay available for monitoring")
-                            last_log_time = current_time
-                    
-                    time.sleep(5)  # Check every 5 seconds instead of 2
-                except Exception as e:
-                    print(f"Debug: Error in screenplay monitoring: {e}")
-                    print(f"Debug: Exception type: {type(e)}")
-                    import traceback
-                    print(f"Debug: Monitor traceback: {traceback.format_exc()}")
-                    time.sleep(10)  # Wait longer on error
-        
-        # Start background monitoring thread
-        print("Debug: Starting background monitoring thread")
-        thread = threading.Thread(target=monitor_thread)
-        thread.daemon = True
-        thread.start()
-        print("Debug: Background monitoring thread started")
-    
-    def get_screenplay_hash(self, screenplay):
-        """Create a simple hash of the screenplay content to detect changes"""
-        try:
-            if not hasattr(screenplay, 'lines'):
-                print("Debug: Screenplay has no lines attribute")
-                return None
-            
-            # Use the first 1000 characters and total line count as a simple hash
-            content = ""
-            line_count = len(screenplay.lines)
-            
-            for i, line in enumerate(screenplay.lines):
-                if i < 50:  # First 50 lines
-                    content += line.text
-                if len(content) > 1000:
-                    break
-            
-            hash_input = content + str(line_count)
-            hash_result = hash(hash_input)
-            
-            # Only log hash details when there's a significant change
-            if not hasattr(self, '_last_hash_log') or self._last_hash_log != hash_result:
-                print(f"Debug: Hash calculation - {line_count} lines, {len(content)} chars, hash: {hash_result}")
-                self._last_hash_log = hash_result
-            
-            return hash_result
-        except Exception as e:
-            print(f"Debug: Error calculating screenplay hash: {e}")
-            print(f"Debug: Exception type: {type(e)}")
-            return None
     
     def process_screenplay_embeddings(self, screenplay):
-        """Process screenplay embeddings in background thread"""
-        def process_thread():
-            try:
-                print("Debug: Starting screenplay embedding processing in background thread")
-                print(f"Debug: Screenplay object type: {type(screenplay)}")
-                print(f"Debug: Screenplay has 'lines' attribute: {hasattr(screenplay, 'lines')}")
-                if hasattr(screenplay, 'lines'):
-                    print(f"Debug: Screenplay has {len(screenplay.lines)} lines")
-                
-                # Clear existing embeddings first
-                if self.ai_service:
-                    print("Debug: Clearing existing embeddings...")
-                    self.ai_service.clear_embeddings()
-                    # Clear system prompt cache for new screenplay
-                    self.ai_service.clear_system_prompt_cache()
-                
-                # Store new embeddings
-                print("Debug: Storing new screenplay embeddings...")
-                success = self.ai_service.store_screenplay_embeddings(screenplay)
-                print(f"Debug: Embedding storage result: {success}")
-                
-                if success:
-                    # Get collection info
-                    print("Debug: Getting collection info...")
-                    info = self.ai_service.get_collection_info()
-                    print(f"Debug: Collection info: {info}")
-                    
-                    self.embeddings_initialized = True
-                    status_msg = f"✓ Semantic search ready ({info['document_count']} scenes analyzed)"
-                    print(f"Debug: Setting status: {status_msg}")
-                    self.update_status(status_msg)
-                    
-                    # Add a helpful message to the chat
-                    chat_msg = f"Screenplay analyzed! I can now help you with character development, plot analysis, scene structure, and finding patterns in your {info['document_count']} scenes."
-                    print(f"Debug: Adding chat message: {chat_msg}")
-                    self.add_message("System", chat_msg, is_user=False)
-                else:
-                    print("Debug: Embedding storage failed, setting error status")
-                    self.update_status("⚠ Semantic search not available")
-                    self.embeddings_initialized = False
-            except Exception as e:
-                print(f"Debug: Exception in embedding processing: {e}")
-                print(f"Debug: Exception type: {type(e)}")
-                import traceback
-                print(f"Debug: Traceback: {traceback.format_exc()}")
-                self.update_status(f"Error processing screenplay: {e}")
-                self.embeddings_initialized = False
-        
-        # Start background thread
-        print("Debug: Starting background thread for embedding processing")
-        thread = threading.Thread(target=process_thread)
-        thread.daemon = True
-        thread.start()
-        print("Debug: Background thread started")
+        """Process screenplay embeddings in background thread (legacy method)"""
+        # This method is kept for compatibility but now uses synchronous processing
+        print("Debug: Legacy process_screenplay_embeddings called, using sync method")
+        return self.process_screenplay_embeddings_sync(screenplay)
     
     def update_status(self, message):
         """Update the status bar message"""
@@ -298,7 +163,7 @@ class AIAssistantPanel(wx.Panel):
         self.send_button.SetLabel("Thinking...")
         
         # Get AI response
-        if self.ai_available:
+        if self.ai_service:
             # Run AI call in background thread
             thread = threading.Thread(target=self.get_ai_response, args=(message,))
             thread.daemon = True
@@ -311,6 +176,10 @@ class AIAssistantPanel(wx.Panel):
     def get_ai_response(self, user_message):
         """Get response from Claude in background thread with semantic search"""
         try:
+            # Check if screenplay has changed and update embeddings if needed
+            print("Debug: Checking if screenplay needs embedding update...")
+            self.ensure_embeddings_up_to_date()
+            
             # Get document context (simplified for AI service)
             context = self.get_basic_context()
             
@@ -503,7 +372,7 @@ class AIAssistantPanel(wx.Panel):
         self.chat_display.SetValue("")
         
         # Add welcome message back
-        if self.ai_available:
+        if self.ai_service:
             welcome_msg = "Conversation cleared. I'm ready to help you with your screenplay!"
         else:
             welcome_msg = "Conversation cleared. AI service is not available."
@@ -555,4 +424,122 @@ class AIAssistantPanel(wx.Panel):
         else:
             analysis += "• Consider adding more dialogue to balance the action-heavy content\n"
         
-        return analysis 
+        return analysis
+    
+    def get_screenplay_hash(self, screenplay):
+        """Create a simple hash of the screenplay content to detect changes"""
+        try:
+            if not hasattr(screenplay, 'lines'):
+                print("Debug: Screenplay has no lines attribute")
+                return None
+            
+            # Use the first 1000 characters and total line count as a simple hash
+            content = ""
+            line_count = len(screenplay.lines)
+            
+            for i, line in enumerate(screenplay.lines):
+                if i < 50:  # First 50 lines
+                    content += line.text
+                if len(content) > 1000:
+                    break
+            
+            hash_input = content + str(line_count)
+            hash_result = hash(hash_input)
+            
+            # Only log hash details when there's a significant change
+            if not hasattr(self, '_last_hash_log') or self._last_hash_log != hash_result:
+                print(f"Debug: Hash calculation - {line_count} lines, {len(content)} chars, hash: {hash_result}")
+                self._last_hash_log = hash_result
+            
+            return hash_result
+        except Exception as e:
+            print(f"Debug: Error calculating screenplay hash: {e}")
+            print(f"Debug: Exception type: {type(e)}")
+            return None
+    
+    def ensure_embeddings_up_to_date(self):
+        """Check if screenplay has changed and update embeddings if needed"""
+        try:
+            screenplay = self.get_current_screenplay()
+            if not screenplay:
+                print("Debug: No screenplay available for embedding update")
+                return False
+            
+            # Calculate current hash
+            current_hash = self.get_screenplay_hash(screenplay)
+            if current_hash is None:
+                print("Debug: Could not calculate screenplay hash")
+                return False
+            
+            # Check if screenplay has changed
+            if current_hash == self.current_screenplay_hash:
+                print("Debug: Screenplay unchanged, embeddings are up to date")
+                return True
+            
+            print(f"Debug: Screenplay changed, updating embeddings")
+            print(f"Debug: Old hash: {self.current_screenplay_hash}")
+            print(f"Debug: New hash: {current_hash}")
+            
+            # Update embeddings
+            success = self.process_screenplay_embeddings_sync(screenplay)
+            if success:
+                self.current_screenplay_hash = current_hash
+                return True
+            else:
+                print("Debug: Failed to update embeddings")
+                return False
+                
+        except Exception as e:
+            print(f"Debug: Error ensuring embeddings up to date: {e}")
+            return False
+    
+    def process_screenplay_embeddings_sync(self, screenplay):
+        """Process screenplay embeddings synchronously (for on-demand updates)"""
+        try:
+            print("Debug: Processing screenplay embeddings synchronously")
+            print(f"Debug: Screenplay object type: {type(screenplay)}")
+            print(f"Debug: Screenplay has 'lines' attribute: {hasattr(screenplay, 'lines')}")
+            if hasattr(screenplay, 'lines'):
+                print(f"Debug: Screenplay has {len(screenplay.lines)} lines")
+            
+            # Clear existing embeddings first
+            if self.ai_service:
+                print("Debug: Clearing existing embeddings...")
+                self.ai_service.clear_embeddings()
+                # Clear system prompt cache for new screenplay
+                self.ai_service.clear_system_prompt_cache()
+            
+            # Store new embeddings
+            print("Debug: Storing new screenplay embeddings...")
+            success = self.ai_service.store_screenplay_embeddings(screenplay)
+            print(f"Debug: Embedding storage result: {success}")
+            
+            if success:
+                # Get collection info
+                print("Debug: Getting collection info...")
+                info = self.ai_service.get_collection_info()
+                print(f"Debug: Collection info: {info}")
+                
+                self.embeddings_initialized = True
+                status_msg = f"✓ Semantic search ready ({info['document_count']} scenes analyzed)"
+                print(f"Debug: Setting status: {status_msg}")
+                self.update_status(status_msg)
+                
+                # Add a helpful message to the chat
+                chat_msg = f"Screenplay updated! I can now help you with character development, plot analysis, scene structure, and finding patterns in your {info['document_count']} scenes."
+                print(f"Debug: Adding chat message: {chat_msg}")
+                self.add_message("System", chat_msg, is_user=False)
+                return True
+            else:
+                print("Debug: Embedding storage failed, setting error status")
+                self.update_status("⚠ Semantic search not available")
+                self.embeddings_initialized = False
+                return False
+        except Exception as e:
+            print(f"Debug: Exception in embedding processing: {e}")
+            print(f"Debug: Exception type: {type(e)}")
+            import traceback
+            print(f"Debug: Traceback: {traceback.format_exc()}")
+            self.update_status(f"Error processing screenplay: {e}")
+            self.embeddings_initialized = False
+            return False 

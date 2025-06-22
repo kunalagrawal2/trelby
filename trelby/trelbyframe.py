@@ -1046,6 +1046,16 @@ class MyFrame(wx.Frame):
             )
             return
         
+        # Validate text length to prevent issues
+        if len(selected_text) > 10000:
+            wx.MessageBox(
+                "Selected text is too long for formatting. Please select a smaller portion (under 10,000 characters).",
+                "Text Too Long",
+                wx.OK | wx.ICON_WARNING,
+                self
+            )
+            return
+        
         # Format the selected text using intelligent formatting with AI
         try:
             # Get the current selection
@@ -1068,8 +1078,23 @@ class MyFrame(wx.Frame):
             # Use Trelby's paste functionality to insert the formatted text
             if lines:
                 current_ctrl.sp.paste(lines)
+            else:
+                # If formatting failed, restore the original text
+                current_ctrl.sp.paste([current_ctrl.sp.lines[0].__class__(current_ctrl.sp.LB_LAST, current_ctrl.sp.ACTION, selected_text)])
+                wx.MessageBox(
+                    "Formatting failed. Original text has been restored.",
+                    "Formatting Error",
+                    wx.OK | wx.ICON_WARNING,
+                    self
+                )
                 
         except Exception as e:
+            # Restore original text on error
+            try:
+                current_ctrl.sp.paste([current_ctrl.sp.lines[0].__class__(current_ctrl.sp.LB_LAST, current_ctrl.sp.ACTION, selected_text)])
+            except:
+                pass
+            
             wx.MessageBox(
                 f"Error formatting text: {str(e)}",
                 "Error",

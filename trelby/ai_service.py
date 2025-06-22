@@ -411,6 +411,41 @@ class AIService:
         print(f"Debug: Semantic context length: {len(context)} characters")
         return context
     
+    def get_simple_response(self, user_message: str) -> str:
+        """
+        Get AI response without semantic search or complex context.
+        Used for formatting and other simple tasks.
+        
+        Args:
+            user_message: User's message
+            
+        Returns:
+            AI response string
+        """
+        try:
+            print(f"Debug: Getting simple AI response for: '{user_message[:50]}...'")
+            
+            # Simple system prompt for formatting tasks
+            system_prompt = """You are an expert AI assistant for screenwriting tasks. 
+Provide clear, direct responses without unnecessary context or explanations.
+For formatting tasks, return only the formatted content as requested."""
+            
+            print("Debug: Calling Claude API with simple prompt...")
+            
+            response = self.claude_client.messages.create(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=2000,  # Higher limit for formatting
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_message}]
+            )
+            
+            response_text = response.content[0].text
+            print(f"Debug: Simple API call successful, response length: {len(response_text)} characters")
+            return response_text
+        except Exception as e:
+            print(f"Debug: Simple API call failed with error: {e}")
+            return f"Error: {str(e)}"
+    
     def get_response(self, user_message: str, context: str = "", conversation_history: List[Dict] = None) -> str:
         """
         Get AI response with enhanced semantic search context.

@@ -172,7 +172,7 @@ Original text to rewrite:
 Return ONLY the rewritten, Fountain-formatted screenplay content. No commentary or explanations."""
                 
                 # Get AI response
-                response = self.ai_service.get_response(prompt)
+                response = self.ai_service.get_simple_response(prompt)
                 
                 # Update UI on main thread
                 wx.CallAfter(self.update_suggestion, response)
