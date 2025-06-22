@@ -4,11 +4,12 @@ import wx
 import time
 import threading
 import hashlib
-from trelby.ai_service import AIService
 import base64
 import os
 from trelby.appearance_utils import get_ai_pane_colors
 from trelby.ai_suggestion import AISuggestionManager
+from trelby.embedding_service import EmbeddingService
+from trelby.ai_service import AIService
 import trelby.screenplay as screenplay
 
 class AIAssistantPanel(wx.Panel):
@@ -19,6 +20,8 @@ class AIAssistantPanel(wx.Panel):
         
         self.gd = gd
         self.ai_service = None
+        self.embedding_service = None
+        self.embedding_ai_service = None
         self.embeddings_initialized = False
         self.current_screenplay_hash = None
         self.processing_lock = threading.Lock()  # Keep lock for thread safety
@@ -61,14 +64,31 @@ class AIAssistantPanel(wx.Panel):
         
         # Initialize AI service
         try:
-            self.ai_service = AIService(service_name="anthropic", model="claude-3-5-sonnet-20241022")
-            print("✓ AI service initialized with embeddings")
+            from trelby.ai import get_ai_service
+            self.ai_service = get_ai_service(service_name="anthropic", model="claude-3-5-sonnet-20241022")
+            print("✓ AI service initialized successfully")
             self.current_service = "anthropic"
         except Exception as e:
             print(f"✗ Failed to initialize AI service: {e}")
             self.ai_service = None
             self.ai_available = False
             self.current_service = None
+        
+        # Initialize embedding service
+        try:
+            self.embedding_service = EmbeddingService()
+            print("✓ Embedding service initialized successfully")
+        except Exception as e:
+            print(f"✗ Failed to initialize embedding service: {e}")
+            self.embedding_service = None
+        
+        # Initialize embedding AI service
+        try:
+            self.embedding_ai_service = AIService()
+            print("✓ Embedding AI service initialized successfully")
+        except Exception as e:
+            print(f"✗ Failed to initialize embedding AI service: {e}")
+            self.embedding_ai_service = None
         
         # Initialize UI
         self.init_ui()
@@ -316,8 +336,8 @@ class AIAssistantPanel(wx.Panel):
         
         # Try to create new service with first model
         try:
-            from trelby.ai_service import AIService
-            self.ai_service = AIService(service_name=selected_service, model=models[0])
+            from trelby.ai import get_ai_service
+            self.ai_service = get_ai_service(service_name=selected_service, model=models[0])
             self.add_message("AI Assistant", f"Switched to {selected_service} with {models[0]}. How can I help you?", is_user=False)
         except Exception as e:
             self.add_message("AI Assistant", f"Error switching to {selected_service}: {str(e)}", is_user=False)
@@ -335,8 +355,8 @@ class AIAssistantPanel(wx.Panel):
         
         try:
             # Create new AI service with selected model
-            from trelby.ai_service import AIService
-            self.ai_service = AIService(service_name=selected_service, model=selected_model)
+            from trelby.ai import get_ai_service
+            self.ai_service = get_ai_service(service_name=selected_service, model=selected_model)
             
             # Add system message about model change
             self.add_message("AI Assistant", f"Switched to {selected_model}. How can I help you?", is_user=False)
@@ -410,6 +430,9 @@ class AIAssistantPanel(wx.Panel):
     
     def is_actionable_content(self, message):
         """Check if the AI response contains content that could be added to the script"""
+        # Disable automatic popup for now
+        return False
+        
         actionable_keywords = [
             'scene', 'character', 'dialogue', 'action', 'description', 'setting',
             'location', 'interior', 'exterior', 'day', 'night', 'morning', 'evening',
@@ -675,8 +698,21 @@ class AIAssistantPanel(wx.Panel):
             print("Debug: Checking if screenplay needs embedding update...")
             self.ensure_embeddings_up_to_date()
             
-            # Get document context (simplified for AI service)
-            context = self.get_basic_context()
+            # Get semantic context from embeddings if available
+            semantic_context = ""
+            if self.embedding_ai_service and self.embeddings_initialized:
+                print("Debug: Getting semantic context from embeddings...")
+                semantic_context = self.embedding_ai_service.get_semantic_context(user_message, n_results=3)
+                print(f"Debug: Semantic context length: {len(semantic_context)} characters")
+            
+            # Get basic document context
+            basic_context = self.get_basic_context()
+            
+            # Combine contexts
+            if semantic_context:
+                combined_context = f"{basic_context}\n\n{semantic_context}"
+            else:
+                combined_context = basic_context
             
             # Get conversation history
             conversation_history = self.chat_history.copy()
@@ -691,8 +727,8 @@ class AIAssistantPanel(wx.Panel):
                     preview = msg['message'][:50] + "..." if len(msg['message']) > 50 else msg['message']
                     print(f"  {sender}: {preview}")
             
-            # Get AI response with semantic search context
-            response = self.ai_service.get_response(user_message, context, conversation_history)
+            # Get AI response with combined context
+            response = self.ai_service.get_response(user_message, combined_context, conversation_history)
             
             # Update UI in main thread
             wx.CallAfter(self.handle_ai_response, response)
@@ -902,8 +938,8 @@ class AIAssistantPanel(wx.Panel):
         analysis += f"• Scene headings: {element_counts.get(sp.SCENE, 0)}\n"
         
         # Embedding status
-        if self.embeddings_initialized:
-            info = self.ai_service.get_collection_info()
+        if self.embeddings_initialized and self.embedding_ai_service:
+            info = self.embedding_ai_service.get_collection_info()
             analysis += f"• Semantic search: {info['document_count']} scenes analyzed\n"
         else:
             analysis += "• Semantic search: Processing...\n"
@@ -969,9 +1005,9 @@ class AIAssistantPanel(wx.Panel):
             # Check if screenplay has changed
             if current_hash == self.current_screenplay_hash:
                 print("Debug: Screenplay unchanged, embeddings are up to date")
-                # Update AI service hash to maintain cache consistency
-                if self.ai_service:
-                    self.ai_service.update_screenplay_hash(current_hash)
+                # Update embedding AI service hash to maintain cache consistency
+                if self.embedding_ai_service:
+                    self.embedding_ai_service.update_screenplay_hash(current_hash)
                 return True
             
             print(f"Debug: Screenplay changed, updating embeddings")
@@ -982,9 +1018,9 @@ class AIAssistantPanel(wx.Panel):
             success = self.process_screenplay_embeddings_sync(screenplay)
             if success:
                 self.current_screenplay_hash = current_hash
-                # Update AI service hash to maintain cache consistency
-                if self.ai_service:
-                    self.ai_service.update_screenplay_hash(current_hash)
+                # Update embedding AI service hash to maintain cache consistency
+                if self.embedding_ai_service:
+                    self.embedding_ai_service.update_screenplay_hash(current_hash)
                 return True
             else:
                 print("Debug: Failed to update embeddings")
@@ -1004,21 +1040,21 @@ class AIAssistantPanel(wx.Panel):
                 print(f"Debug: Screenplay has {len(screenplay.lines)} lines")
             
             # Clear existing embeddings first
-            if self.ai_service:
+            if self.embedding_ai_service:
                 print("Debug: Clearing existing embeddings...")
-                self.ai_service.clear_embeddings()
+                self.embedding_ai_service.clear_embeddings()
                 # Clear context cache for new screenplay (keep system prompt)
-                self.ai_service.clear_context_cache()
+                self.embedding_ai_service.clear_context_cache()
             
             # Store new embeddings
             print("Debug: Storing new screenplay embeddings...")
-            success = self.ai_service.store_screenplay_embeddings(screenplay)
+            success = self.embedding_ai_service.store_screenplay_embeddings(screenplay)
             print(f"Debug: Embedding storage result: {success}")
             
             if success:
                 # Get collection info
                 print("Debug: Getting collection info...")
-                info = self.ai_service.get_collection_info()
+                info = self.embedding_ai_service.get_collection_info()
                 print(f"Debug: Collection info: {info}")
                 
                 self.embeddings_initialized = True

@@ -9,6 +9,7 @@ import chromadb
 from typing import List, Dict, Optional, Tuple
 from dotenv import load_dotenv
 import trelby.screenplay as screenplay_module
+from trelby.ai import get_ai_service
 
 class AIService:
     """
@@ -716,9 +717,3 @@ CONVERSATION MEMORY:
         except Exception as e:
             print(f"Debug: Error initializing ChromaDB: {e}")
             raise 
-    def __init__(self, service_name="anthropic", model=None):
-        self.service = get_ai_service(service_name, model)
-    
-    def get_response(self, user_message, context="", conversation_history=None, image=None):
-        """Get a response from the configured AI service"""
-        return self.service.get_response(user_message, context, conversation_history, image) 
