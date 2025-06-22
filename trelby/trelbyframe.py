@@ -1030,7 +1030,7 @@ class MyFrame(wx.Frame):
         
         # Create and show the AI rewrite dialog
         from trelby.ai_rewrite import AIRewrite
-        dialog = AIRewrite(self, self.aiAssistantPanel.ai_service, selected_text)
+        dialog = AIRewrite(self, self.aiAssistantPanel.embedding_ai_service, selected_text)
         dialog.ShowModal()
         dialog.Destroy()
 
@@ -1072,7 +1072,7 @@ class MyFrame(wx.Frame):
             # Get AI service if available
             ai_service = None
             if hasattr(self, 'aiAssistantPanel') and self.aiAssistantPanel:
-                ai_service = self.aiAssistantPanel.ai_service
+                ai_service = self.aiAssistantPanel.embedding_ai_service
             
             # Use intelligent formatting with AI service to create properly formatted lines
             from trelby.screenplay_formatter import fix_formatting
