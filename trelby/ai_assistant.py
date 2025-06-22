@@ -68,6 +68,7 @@ class AIAssistantPanel(wx.Panel):
             self.ai_service = get_ai_service(service_name="anthropic", model="claude-3-5-sonnet-20241022")
             print("✓ AI service initialized successfully")
             self.current_service = "anthropic"
+            self.ai_available = True  # Set to True when service is successfully initialized
         except Exception as e:
             print(f"✗ Failed to initialize AI service: {e}")
             self.ai_service = None
@@ -316,9 +317,6 @@ class AIAssistantPanel(wx.Panel):
     
     def OnServiceChange(self, event):
         """Handle service selection change"""
-        if not self.ai_available:
-            return
-            
         selected_service = self.service_choice.GetString(self.service_choice.GetSelection())
         
         # Update model choices for the selected service
@@ -338,15 +336,14 @@ class AIAssistantPanel(wx.Panel):
         try:
             from trelby.ai import get_ai_service
             self.ai_service = get_ai_service(service_name=selected_service, model=models[0])
+            self.ai_available = True  # Set to True when service is successfully created
             self.add_message("AI Assistant", f"Switched to {selected_service} with {models[0]}. How can I help you?", is_user=False)
         except Exception as e:
+            self.ai_available = False  # Set to False if service creation fails
             self.add_message("AI Assistant", f"Error switching to {selected_service}: {str(e)}", is_user=False)
     
     def OnModelChange(self, event):
         """Handle model selection change"""
-        if not self.ai_available:
-            return
-            
         selected_service = self.service_choice.GetString(self.service_choice.GetSelection())
         selected_model = self.model_choice.GetString(self.model_choice.GetSelection())
         
@@ -357,10 +354,12 @@ class AIAssistantPanel(wx.Panel):
             # Create new AI service with selected model
             from trelby.ai import get_ai_service
             self.ai_service = get_ai_service(service_name=selected_service, model=selected_model)
+            self.ai_available = True  # Set to True when service is successfully created
             
             # Add system message about model change
             self.add_message("AI Assistant", f"Switched to {selected_model}. How can I help you?", is_user=False)
         except Exception as e:
+            self.ai_available = False  # Set to False if service creation fails
             self.add_message("AI Assistant", f"Error switching to {selected_model}: {str(e)}", is_user=False)
     
     def refresh_appearance(self):
@@ -728,7 +727,8 @@ class AIAssistantPanel(wx.Panel):
                     print(f"  {sender}: {preview}")
             
             # Get AI response with combined context
-            response = self.ai_service.get_response(user_message, combined_context, conversation_history)
+            # Pass the current AI service to use the correct model
+            response = self.embedding_ai_service.get_response(user_message, combined_context, conversation_history, self.ai_service)
             
             # Update UI in main thread
             wx.CallAfter(self.handle_ai_response, response)

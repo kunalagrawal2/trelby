@@ -1030,7 +1030,7 @@ class MyFrame(wx.Frame):
         
         # Create and show the AI rewrite dialog
         from trelby.ai_rewrite import AIRewrite
-        dialog = AIRewrite(self, self.aiAssistantPanel.embedding_ai_service, selected_text)
+        dialog = AIRewrite(self, self.aiAssistantPanel.ai_service, selected_text)
         dialog.ShowModal()
         dialog.Destroy()
 

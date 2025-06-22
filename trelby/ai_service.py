@@ -449,19 +449,25 @@ class AIService:
         print(f"Debug: Semantic context length: {len(context)} characters")
         return context
     
-    def get_simple_response(self, user_message: str) -> str:
+    def get_simple_response(self, user_message: str, ai_service=None) -> str:
         """
         Get AI response without semantic search or complex context.
         Used for formatting and other simple tasks.
         
         Args:
             user_message: User's message
+            ai_service: Optional AI service instance to use instead of internal Claude client
             
         Returns:
             AI response string
         """
         try:
             print(f"Debug: Getting simple AI response for: '{user_message[:50]}...'")
+            
+            # If an external AI service is provided, use it directly
+            if ai_service:
+                print("Debug: Using external AI service for simple response")
+                return ai_service.get_response(user_message, "", None)
             
             # Simple system prompt for formatting tasks
             system_prompt = """You are an expert AI assistant for screenwriting tasks. 
@@ -484,7 +490,7 @@ For formatting tasks, return only the formatted content as requested."""
             print(f"Debug: Simple API call failed with error: {e}")
             return f"Error: {str(e)}"
     
-    def get_response(self, user_message: str, context: str = "", conversation_history: List[Dict] = None) -> str:
+    def get_response(self, user_message: str, context: str = "", conversation_history: List[Dict] = None, ai_service=None) -> str:
         """
         Get AI response with enhanced semantic search context.
         
@@ -492,6 +498,7 @@ For formatting tasks, return only the formatted content as requested."""
             user_message: User's message
             context: Additional context (e.g., current scene info)
             conversation_history: Previous conversation messages
+            ai_service: Optional AI service instance to use instead of internal Claude client
             
         Returns:
             AI response string
@@ -500,6 +507,17 @@ For formatting tasks, return only the formatted content as requested."""
             print(f"Debug: Getting AI response for: '{user_message[:50]}...'")
             print(f"Debug: Context provided: {len(context)} characters")
             print(f"Debug: Conversation history: {len(conversation_history) if conversation_history else 0} messages")
+            
+            # If an external AI service is provided, use it directly
+            if ai_service:
+                print("Debug: Using external AI service for response")
+                # Combine context with user message for the external service
+                if context and context.strip():
+                    enhanced_message = f"{user_message}\n\nCONTEXT:\n{context}"
+                else:
+                    enhanced_message = user_message
+                
+                return ai_service.get_response(enhanced_message, "", conversation_history)
             
             # Get semantic context from similar scenes
             print("Debug: Getting semantic context...")
