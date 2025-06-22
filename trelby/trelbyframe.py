@@ -21,6 +21,7 @@ import trelby.util as util
 from trelby.ids import *
 from trelby.trelbypanel import MyPanel
 from trelby.ai_assistant import AIAssistantPanel
+from trelby.table_read_dialog import TableReadDialog
 
 
 def getCfgGui():
@@ -203,7 +204,7 @@ class MyFrame(wx.Frame):
         addTB(ID_FILE_PRINT, "pdf.png", "Print (via PDF)")
 
         self.toolBar.AddSeparator()
-
+        
         addTB(ID_FILE_IMPORT, "import.png", "Import a text script")
         addTB(ID_FILE_EXPORT, "export.png", "Export script")
 
@@ -218,6 +219,7 @@ class MyFrame(wx.Frame):
         addTB(ID_TOOLBAR_VIEWS, "layout.png", "View mode")
         addTB(ID_TOOLBAR_REPORTS, "report.png", "Script reports")
         addTB(ID_TOOLBAR_TOOLS, "tools.png", "Tools")
+        addTB(ID_TOOLBAR_TABLE_READ, "tableread.png", "Table Read (TTS)")
         addTB(ID_TOOLBAR_SETTINGS, "settings.png", "Global settings")
 
         self.toolBar.SetBackgroundColour(gd.cfgGui.tabBarBgColor)
@@ -371,6 +373,7 @@ class MyFrame(wx.Frame):
             self.Bind(wx.EVT_MENU, self.OnCharacterMap, id=ID_TOOLS_CHARMAP)
             self.Bind(wx.EVT_MENU, self.OnCompareScripts, id=ID_TOOLS_COMPARE_SCRIPTS)
             self.Bind(wx.EVT_MENU, self.OnWatermark, id=ID_TOOLS_WATERMARK)
+            self.Bind(wx.EVT_MENU, self.OnTableRead, id=ID_TOOLBAR_TABLE_READ)
             self.Bind(wx.EVT_MENU, self.OnHelpCommands, id=ID_HELP_COMMANDS)
             self.Bind(wx.EVT_MENU, self.OnHelpManual, id=ID_HELP_MANUAL)
             self.Bind(wx.EVT_MENU, self.OnAbout, id=ID_HELP_ABOUT)
@@ -881,6 +884,34 @@ class MyFrame(wx.Frame):
 
         dlg.Destroy()
 
+    def OnTableRead(self, event=None):
+        """handle table read toolbar button click"""
+        if not self.panel.ctrl.sp or len(self.panel.ctrl.sp.lines) <= 1:
+            wx.MessageBox("No script to read please load a screenplay first.", "Error: No Script", wx.OK | wx.ICON_INFORMATION)
+            return
+        
+        # Show the enhanced table read dialog
+        dialog = TableReadDialog(self, self.panel.ctrl.sp)
+        dialog.ShowModal()
+        dialog.Destroy()
+
+    def show_table_read_dialog(self):
+        """Show a simple table read dialog"""
+        dialog = wx.MessageDialog(
+            self,
+            "Table Read is ready to read!\n\n"
+            "Do you want to read out the screenplay?",
+            "Table Read",
+            wx.YES_NO | wx.ICON_QUESTION
+        )
+        result = dialog.ShowModal()
+        dialog.Destroy()
+        
+        if result == wx.ID_YES:
+            # TODO: Implement actual table read functionality
+            
+            pass
+
     def OnReportCharacter(self, event=None):
         self.panel.ctrl.OnReportCharacter()
 
@@ -932,7 +963,27 @@ class MyFrame(wx.Frame):
         win.Show()
 
     def OnToolBarMenu(self, event, menu):
-        self.PopupMenu(menu)
+        # Create a copy of the menu to avoid wxPython assertion error
+        # when trying to popup a menu that's already attached to the menu bar
+        try:
+            # Try to popup the menu directly first
+            self.PopupMenu(menu)
+        except wx._core.wxAssertionError:
+            # If that fails, create a copy of the menu items
+            popup_menu = wx.Menu()
+            
+            # Copy menu items from the original menu
+            for i in range(menu.GetMenuItemCount()):
+                item = menu.FindItemByPosition(i)
+                if item:
+                    if item.IsSeparator():
+                        popup_menu.AppendSeparator()
+                    else:
+                        popup_menu.Append(item.GetId(), item.GetItemLabel())
+            
+            # Popup the copy instead
+            self.PopupMenu(popup_menu)
+            popup_menu.Destroy()
 
     def OnCloseWindow(self, event):
         doExit = True
@@ -980,3 +1031,50 @@ class MyFrame(wx.Frame):
         """Clear the AI assistant conversation history"""
         if hasattr(self, 'aiAssistantPanel') and self.aiAssistantPanel:
             self.aiAssistantPanel.clear_conversation_history()
+
+
+class TTSTableReadDialog(wx.Dialog):
+    def __init__(self, parent, screenplay):
+        wx.Dialog.__init__(self, parent, -1, "Table Read - Text to Speech", 
+                          size=(600, 400))
+        
+        self.screenplay = screenplay
+        self.create_ui()
+    
+    def create_ui(self):
+        """Create the dialog UI"""
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # Title
+        title = wx.StaticText(self, -1, "Table Read - Text to Speech")
+        title.SetFont(wx.Font(12, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        sizer.Add(title, 0, wx.ALL | wx.CENTER, 10)
+        
+        # Status
+        self.status_text = wx.StaticText(self, -1, "Ready to start table read")
+        sizer.Add(self.status_text, 0, wx.ALL, 10)
+        
+        # Buttons
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        
+        self.start_btn = wx.Button(self, -1, "Start Table Read")
+        self.start_btn.Bind(wx.EVT_BUTTON, self.on_start)
+        button_sizer.Add(self.start_btn, 1, wx.RIGHT, 5)
+        
+        self.close_btn = wx.Button(self, -1, "Close")
+        self.close_btn.Bind(wx.EVT_BUTTON, self.on_close)
+        button_sizer.Add(self.close_btn, 1, wx.LEFT, 5)
+        
+        sizer.Add(button_sizer, 0, wx.EXPAND | wx.ALL, 10)
+        
+        self.SetSizer(sizer)
+    
+    def on_start(self, event):
+        """Handle start button click"""
+        self.status_text.SetLabel("Starting table read...")
+        # TODO: Implement actual TTS functionality
+        wx.MessageBox("TTS functionality will be implemented here!", "Info", wx.OK)
+    
+    def on_close(self, event):
+        """Handle close button click"""
+        self.Close()
