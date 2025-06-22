@@ -512,8 +512,8 @@ class AIAssistantPanel(wx.Panel):
             if self.ai_service:
                 print("Debug: Clearing existing embeddings...")
                 self.ai_service.clear_embeddings()
-                # Clear system prompt cache and query cache for new screenplay
-                self.ai_service.clear_system_prompt_cache()
+                # Clear context cache for new screenplay (keep system prompt)
+                self.ai_service.clear_context_cache()
             
             # Store new embeddings
             print("Debug: Storing new screenplay embeddings...")

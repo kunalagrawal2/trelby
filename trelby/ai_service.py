@@ -403,7 +403,7 @@ class AIService:
             print(f"Debug: Error searching similar scenes: {e}")
             return None
     
-    def get_semantic_context(self, user_message: str, n_results: int = 3) -> str:
+    def get_semantic_context(self, user_message: str, n_results: int = 2) -> str:
         """
         Get semantic context from similar scenes for the user's query.
         
@@ -505,16 +505,19 @@ For formatting tasks, return only the formatted content as requested."""
             semantic_context = self.get_semantic_context(user_message)
             print(f"Debug: Semantic context length: {len(semantic_context)} characters")
             
-            # Check if we need to rebuild the system prompt
-            need_rebuild = (
-                self.cached_system_prompt is None or
-                self.cached_semantic_context != semantic_context or
+            # Check if we need to send a new system prompt or context update
+            # Only trigger context update if document context changed, not semantic context
+            # (semantic context changes with each query, which is expected)
+            context_changed = (
                 self.cached_document_context != context
             )
             
-            if need_rebuild:
-                print("Debug: Rebuilding system prompt (context changed or first time)")
-                # Build system prompt
+            # Build messages array with conversation history
+            messages = []
+            
+            # Only send system prompt if it's the first time or if we don't have one cached
+            if self.cached_system_prompt is None:
+                print("Debug: Sending initial system prompt")
                 system_prompt = """You are an expert AI assistant specializing in screenwriting and creative storytelling. Your role is to help writers develop compelling narratives, characters, and dialogue.
 
 CORE BEHAVIORS:
@@ -564,28 +567,11 @@ CONVERSATION MEMORY:
 - Reference earlier points made by the user or yourself when relevant
 - Maintain continuity in your advice and suggestions
 - Don't repeat information already discussed unless specifically asked"""
-
-                # Add semantic context if available
-                if semantic_context:
-                    system_prompt += f"\n\n{semantic_context}"
-                    print("Debug: Added semantic context to system prompt")
                 
-                # Add document context if provided
-                if context and context.strip():
-                    system_prompt += f"\n\nCURRENT SCREENPLAY CONTEXT:\n{context}"
-                    print("Debug: Added document context to system prompt")
-                
-                # Cache the system prompt and contexts
                 self.cached_system_prompt = system_prompt
-                self.cached_semantic_context = semantic_context
-                self.cached_document_context = context
-                
-                print(f"Debug: Cached new system prompt (length: {len(system_prompt)} characters)")
+                print(f"Debug: Cached system prompt (length: {len(system_prompt)} characters)")
             else:
-                print("Debug: Using cached system prompt (no context changes)")
-            
-            # Build messages array with conversation history
-            messages = []
+                print("Debug: Using cached system prompt")
             
             # Add conversation history if provided
             if conversation_history:
@@ -599,12 +585,45 @@ CONVERSATION MEMORY:
                         })
                         print(f"Debug: Added message {i+1}: {role} ({len(msg['message'])} chars)")
             
-            # Add current user message
-            messages.append({
-                "role": "user",
-                "content": user_message
-            })
-            print(f"Debug: Added current user message ({len(user_message)} chars)")
+            # Send context update as a user message if context changed
+            if context_changed:
+                print("Debug: Document context changed, sending context update")
+                context_update = []
+                
+                if context and context.strip():
+                    context_update.append(f"UPDATED SCREENPLAY CONTEXT:\n{context}")
+                    print("Debug: Added document context to update")
+                
+                if context_update:
+                    context_message = "\n\n".join(context_update)
+                    messages.append({
+                        "role": "user",
+                        "content": f"Please update your context with the following information:\n\n{context_message}"
+                    })
+                    print(f"Debug: Added context update message ({len(context_message)} chars)")
+                
+                # Update cached document context
+                self.cached_document_context = context
+            else:
+                print("Debug: Document context unchanged, no update needed")
+            
+            # Always include semantic context in the system prompt or as part of the conversation
+            # since it changes with each query (this is expected behavior)
+            if semantic_context:
+                # Include semantic context in the current user message
+                enhanced_user_message = f"{user_message}\n\nSEMANTIC SEARCH RESULTS:\n{semantic_context}"
+                messages.append({
+                    "role": "user",
+                    "content": enhanced_user_message
+                })
+                print(f"Debug: Added current user message with semantic context ({len(enhanced_user_message)} chars)")
+            else:
+                # Add current user message without semantic context
+                messages.append({
+                    "role": "user",
+                    "content": user_message
+                })
+                print(f"Debug: Added current user message ({len(user_message)} chars)")
             
             print(f"Debug: Total messages: {len(messages)}")
             print("Debug: Calling Claude API...")
@@ -665,6 +684,12 @@ CONVERSATION MEMORY:
         self.query_embedding_cache = {}
         self.last_screenplay_hash = None
     
+    def clear_context_cache(self):
+        """Clear only context caches, keep system prompt"""
+        print("Debug: Clearing context caches only")
+        self.cached_semantic_context = None
+        self.cached_document_context = None
+    
     def clear_query_cache(self):
         """Clear the query embedding cache"""
         print("Debug: Clearing query embedding cache")
@@ -673,8 +698,8 @@ CONVERSATION MEMORY:
     def update_screenplay_hash(self, screenplay_hash):
         """Update the screenplay hash and clear caches if it changed"""
         if screenplay_hash != self.last_screenplay_hash:
-            print("Debug: Screenplay hash changed, clearing caches")
-            self.clear_system_prompt_cache()
+            print("Debug: Screenplay hash changed, clearing context caches")
+            self.clear_context_cache()  # Only clear context, not system prompt
             self.last_screenplay_hash = screenplay_hash
         else:
             print("Debug: Screenplay hash unchanged, keeping caches")
